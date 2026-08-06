@@ -2,6 +2,8 @@ import { eq, schema, withElevated, withTenant } from '@crms/database';
 import { newId, NotFound, createLogger } from '@crms/kernel';
 import { getContext } from '@crms/tenant-context';
 
+export { registerStripeIfConfigured } from './stripe.js';
+
 const logger = createLogger('billing');
 
 /**

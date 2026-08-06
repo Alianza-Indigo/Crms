@@ -5,6 +5,8 @@ import rateLimit from '@fastify/rate-limit';
 import { loadEnv } from '@crms/config';
 import { createLogger } from '@crms/kernel';
 import { getPool } from '@crms/database';
+import { registerStripeIfConfigured } from '@crms/billing';
+import { registerProvidersFromEnv } from './lib/providers.js';
 import { errorHandler } from './lib/errors.js';
 import { authRoutes } from './routes/auth.js';
 import { builderRoutes } from './routes/builder.js';
@@ -14,10 +16,15 @@ import { aiRoutes } from './routes/ai.js';
 import { platformRoutes } from './routes/platform.js';
 import { adminRoutes } from './routes/admin.js';
 import { automationRoutes } from './routes/automations.js';
+import { realtimeRoutes } from './routes/realtime.js';
 
 const logger = createLogger('api');
 
 export async function buildServer() {
+  // Auto-register credential/flag-gated providers (Stripe, PDF, sandbox runner).
+  registerStripeIfConfigured();
+  registerProvidersFromEnv();
+
   const app = Fastify({ logger: false, trustProxy: true, bodyLimit: 5 * 1024 * 1024 });
 
   await app.register(helmet, { contentSecurityPolicy: false });
@@ -46,6 +53,7 @@ export async function buildServer() {
   await app.register(platformRoutes, { prefix: '/v1' });
   await app.register(adminRoutes, { prefix: '/v1' });
   await app.register(automationRoutes, { prefix: '/v1' });
+  await app.register(realtimeRoutes, { prefix: '/v1' });
 
   return app;
 }

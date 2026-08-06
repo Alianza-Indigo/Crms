@@ -2,7 +2,15 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { and, eq, schema, withElevated } from '@crms/database';
 import { newId } from '@crms/kernel';
-import { authService, buildAuthUrl, handleCallback, isGoogleConfigured } from '@crms/auth';
+import {
+  authService,
+  buildAuthUrl,
+  handleCallback,
+  isGoogleConfigured,
+  buildOidcAuthUrl,
+  handleOidcCallback,
+  isOidcConfigured,
+} from '@crms/auth';
 import { loadEnv } from '@crms/config';
 import { createSubscription } from '@crms/billing';
 import { pub, authed } from '../lib/context.js';
@@ -52,6 +60,30 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       const q = z.object({ code: z.string(), state: z.string() }).parse(req.query);
       const session = await handleCallback({ code: q.code, state: q.state, ip: req.ip });
       // Redirect back to the web app with the session token in the fragment.
+      const base = loadEnv().APP_BASE_URL;
+      reply.redirect(`${base}/auth/complete#token=${session.token}&new=${session.isNewUser ? '1' : '0'}`);
+    }),
+  );
+
+  // --- Generic OIDC SSO (PRD §32.1) ---
+  app.get(
+    '/auth/oidc/start',
+    pub(async (req, reply) => {
+      if (!isOidcConfigured()) return { configured: false };
+      const { url } = await buildOidcAuthUrl();
+      if ((req.headers.accept ?? '').includes('text/html')) {
+        reply.redirect(url);
+        return;
+      }
+      return { url };
+    }),
+  );
+
+  app.get(
+    '/auth/oidc/callback',
+    pub(async (req, reply) => {
+      const q = z.object({ code: z.string(), state: z.string() }).parse(req.query);
+      const session = await handleOidcCallback({ code: q.code, state: q.state, ip: req.ip });
       const base = loadEnv().APP_BASE_URL;
       reply.redirect(`${base}/auth/complete#token=${session.token}&new=${session.isNewUser ? '1' : '0'}`);
     }),

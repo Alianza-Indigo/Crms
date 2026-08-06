@@ -43,7 +43,7 @@ export async function runFederatedQuery(connectionId: string, rawSql: string): P
     return row ?? null;
   });
   if (!conn || !conn.active) throw NotFound('Federated connection', connectionId);
-  if (conn.driver !== 'postgres') {
+  if (conn.driver !== 'postgres' && conn.driver !== 'mysql') {
     throw new AppError('NOT_IMPLEMENTED', `Federated driver '${conn.driver}' not yet supported`, { expose: true });
   }
 
@@ -52,7 +52,24 @@ export async function runFederatedQuery(connectionId: string, rawSql: string): P
   // Resolve BYO credential (host password etc.) — decrypted only for execution.
   const { secret } = await credentialManager.useSecret({ credentialId: conn.credentialId });
   const meta = conn.metadata as Record<string, unknown>;
+  const maskingRules = (conn.maskingRules as Array<{ column: string }>) ?? [];
 
+  const start = Date.now();
+  const rows =
+    conn.driver === 'mysql'
+      ? await runMysql(meta, secret, guarded.sql, guarded.timeoutMs)
+      : await runPostgres(meta, secret, guarded.sql, guarded.timeoutMs);
+  const durationMs = Date.now() - start;
+  logger.info({ connectionId, driver: conn.driver, rows: rows.length, durationMs, tenant: ctx.tenantId }, 'Federated query executed');
+  return {
+    rows: applyMasking(rows, maskingRules),
+    rowCount: rows.length,
+    durationMs,
+    truncated: rows.length >= guarded.limit,
+  };
+}
+
+async function runPostgres(meta: Record<string, unknown>, secret: Record<string, unknown>, sqlText: string, timeoutMs: number): Promise<Record<string, unknown>[]> {
   const sql = postgres({
     host: String(meta.host ?? 'localhost'),
     port: Number(meta.port ?? 5432),
@@ -62,23 +79,39 @@ export async function runFederatedQuery(connectionId: string, rawSql: string): P
     max: 2,
     idle_timeout: 5,
     connect_timeout: 10,
-    connection: { statement_timeout: guarded.timeoutMs },
+    connection: { statement_timeout: timeoutMs },
     ssl: meta.ssl ? 'require' : undefined,
   });
-
-  const start = Date.now();
   try {
-    const rows = (await sql.unsafe(guarded.sql)) as unknown as Record<string, unknown>[];
-    const durationMs = Date.now() - start;
-    const maskingRules = (conn.maskingRules as Array<{ column: string }>) ?? [];
-    logger.info({ connectionId, rows: rows.length, durationMs, tenant: ctx.tenantId }, 'Federated query executed');
-    return {
-      rows: applyMasking(rows, maskingRules),
-      rowCount: rows.length,
-      durationMs,
-      truncated: rows.length >= guarded.limit,
-    };
+    return (await sql.unsafe(sqlText)) as unknown as Record<string, unknown>[];
   } finally {
     await sql.end({ timeout: 5 });
+  }
+}
+
+async function runMysql(meta: Record<string, unknown>, secret: Record<string, unknown>, sqlText: string, timeoutMs: number): Promise<Record<string, unknown>[]> {
+  // mysql2 is an optional peer: imported lazily so Postgres-only deployments
+  // don't need it installed. "Ready — just plug the driver + credentials."
+  let mysql: typeof import('mysql2/promise');
+  try {
+    mysql = await import('mysql2/promise');
+  } catch {
+    throw new AppError('NOT_IMPLEMENTED', 'MySQL federated driver requires the mysql2 package to be installed', { expose: true });
+  }
+  const conn = await mysql.createConnection({
+    host: String(meta.host ?? 'localhost'),
+    port: Number(meta.port ?? 3306),
+    database: String(meta.database ?? ''),
+    user: String(secret.username ?? meta.username ?? ''),
+    password: String(secret.password ?? ''),
+    connectTimeout: 10000,
+    ssl: meta.ssl ? {} : undefined,
+  });
+  try {
+    await conn.query({ sql: `SET SESSION MAX_EXECUTION_TIME=${Math.max(1, Math.floor(timeoutMs))}` }).catch(() => {});
+    const [rows] = await conn.query({ sql: sqlText });
+    return rows as Record<string, unknown>[];
+  } finally {
+    await conn.end();
   }
 }

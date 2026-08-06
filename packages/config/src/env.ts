@@ -34,6 +34,33 @@ const EnvSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   GOOGLE_REDIRECT_URI: z.string().url().optional(),
 
+  // Generic OIDC SSO (PRD §32.1). Point at any OIDC issuer to enable SSO — the
+  // platform discovers endpoints from <issuer>/.well-known/openid-configuration.
+  OIDC_ISSUER: z.string().url().optional(),
+  OIDC_CLIENT_ID: z.string().optional(),
+  OIDC_CLIENT_SECRET: z.string().optional(),
+  OIDC_REDIRECT_URI: z.string().url().optional(),
+
+  // Stripe (platform SaaS billing only — never tenant payments). When set, the
+  // billing engine auto-registers the Stripe provider. Plan→price map is JSON:
+  // {"trial":"price_...","pro":"price_..."}.
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_PRICES: z
+    .string()
+    .optional()
+    .transform((v) => {
+      if (!v) return {} as Record<string, string>;
+      try {
+        return JSON.parse(v) as Record<string, string>;
+      } catch {
+        return {} as Record<string, string>;
+      }
+    }),
+
+  // Sandbox script runner: 'off' (fail-closed, default) or 'worker' (opt-in
+  // worker_threads+vm runner). PRD §28.2.
+  SANDBOX_RUNNER: z.enum(['off', 'worker']).default('off'),
+
   APP_BASE_URL: z.string().url().default('http://localhost:3000'),
   API_BASE_URL: z.string().url().default('http://localhost:4000'),
   WEBHOOK_BASE_URL: z.string().url().default('http://localhost:4000/webhooks'),

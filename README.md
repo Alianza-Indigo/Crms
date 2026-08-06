@@ -187,11 +187,28 @@ Docker + environment variables (`docker compose` here mirrors that).
 - **AI conversation persistence**: generation records AIConversation + AISession
   (messages + provider usage) linked to the resulting AIPlan.
 
+## Ready — just plug credentials / enable
+
+These are implemented and wired behind auto-registering seams; they activate the
+moment their credential or flag is present, with nothing else to change:
+
+| Capability | Enable by |
+|---|---|
+| **Google login** | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` |
+| **Generic OIDC SSO** (Okta/Auth0/Entra/Keycloak) | `OIDC_ISSUER` + client id/secret (endpoints auto-discovered) |
+| **Stripe SaaS billing** | `STRIPE_SECRET_KEY` + `STRIPE_PRICES` (auto-registers the provider) |
+| **PDF documents** | on by default (pure-JS pdfkit renderer) |
+| **Realtime SSE** (`GET /v1/realtime`) | Redis running (worker publishes per-tenant, API streams) |
+| **Federated MySQL** (read-only) | a `federated_connections` row with `driver:"mysql"` + BYO credential |
+| **Custom scripts** | `SANDBOX_RUNNER=worker` (opt-in worker-thread+vm isolate) |
+
+For hostile multi-tenant script isolation, register an isolated-vm/Deno/
+Firecracker runner via the same `registerRunner` seam; for pixel-perfect PDFs,
+register a headless-Chrome renderer via `registerPdfRenderer`.
+
 ## Scope note
 
-Security-critical and data paths are implemented and tested. Areas intentionally
-left with a clean, registered-provider seam (documented inline) rather than a
-full build: the out-of-process script isolate runner, the headless-PDF renderer,
-and the realtime gateway. Still ahead as product surface: visual view/form/
-dashboard builders, portals runtime, full-text/semantic search, import pipeline,
-and the tenant-facing agent runtime.
+Security-critical and data paths are implemented and tested. Still ahead as
+product surface (not infra): visual view/form/dashboard builders, portals
+runtime, full-text/semantic search, the import pipeline, and the tenant-facing
+agent runtime.

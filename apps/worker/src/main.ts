@@ -8,6 +8,7 @@ import { drainAutomationRuns } from './automation-runner.js';
 import { archiveAuditLogs } from './audit-archiver.js';
 import { enqueueWebhookDeliveries, drainWebhookDeliveries } from './webhooks.js';
 import { refreshExpiringCredentials } from './credential-refresher.js';
+import { publishEvent } from '@crms/realtime';
 
 const logger = createLogger('worker');
 
@@ -41,6 +42,8 @@ async function handleEvent(event: DomainEvent): Promise<void> {
   // Fan out to subscribed webhooks (delivered by the webhook loop, off-txn).
   const webhooks = await enqueueWebhookDeliveries(event);
   if (webhooks) logger.info({ event: event.type, webhooks }, 'Webhook deliveries queued');
+  // Push to realtime subscribers (SSE) for this tenant.
+  await publishEvent(event.tenantId, event);
 }
 
 async function loop(name: string, fn: () => Promise<number>, intervalMs: number): Promise<void> {

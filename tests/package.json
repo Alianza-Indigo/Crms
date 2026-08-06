@@ -13,6 +13,7 @@
     "@crms/config": "workspace:*",
     "@crms/credential-engine": "workspace:*",
     "@crms/database": "workspace:*",
+    "@crms/document-engine": "workspace:*",
     "@crms/events": "workspace:*",
     "@crms/kernel": "workspace:*",
     "@crms/permissions": "workspace:*",
