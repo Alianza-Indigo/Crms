@@ -257,6 +257,39 @@ export const subscriptions = pgTable(
 );
 
 /**
+ * ImportJob (PRD §24). Tracks an async CSV/JSON/records import: column mapping,
+ * validation, dedup strategy, per-row results and a reversible batch id.
+ */
+export const importJobs = pgTable(
+  'import_jobs',
+  {
+    id: text('id').primaryKey(),
+    tenantId: text('tenant_id').notNull(),
+    applicationId: text('application_id').notNull(),
+    environment: text('environment').notNull().default('production'),
+    moduleId: text('module_id').notNull(),
+    format: text('format').notNull().default('csv'), // csv | json
+    status: text('status').notNull().default('pending'), // pending|running|completed|failed
+    mapping: jsonb('mapping').notNull().default({}),
+    dedupeField: text('dedupe_field'),
+    updateExisting: boolean('update_existing').notNull().default(false),
+    /** Raw payload (small imports) or a storage key for large files. */
+    payload: jsonb('payload').notNull().default({}),
+    storageKey: text('storage_key'),
+    total: integer('total').notNull().default(0),
+    created: integer('created').notNull().default(0),
+    updated: integer('updated').notNull().default(0),
+    failed: integer('failed').notNull().default(0),
+    errors: jsonb('errors').notNull().default([]),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+    createdBy: text('created_by'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('import_jobs_tenant_idx').on(t.tenantId, t.status)],
+);
+
+/**
  * TenantMigrationJob (PRD §6.3). Tracks moving a tenant between isolation tiers.
  */
 export const tenantMigrationJobs = pgTable(

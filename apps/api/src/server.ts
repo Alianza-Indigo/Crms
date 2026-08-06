@@ -20,6 +20,8 @@ import { realtimeRoutes } from './routes/realtime.js';
 import { documentRoutes } from './routes/documents.js';
 import { whitelabelRoutes } from './routes/whitelabel.js';
 import { complianceRoutes } from './routes/compliance.js';
+import { productRoutes } from './routes/product.js';
+import { portalRoutes } from './routes/portals.js';
 
 const logger = createLogger('api');
 
@@ -60,6 +62,8 @@ export async function buildServer() {
   await app.register(documentRoutes, { prefix: '/v1' });
   await app.register(whitelabelRoutes, { prefix: '/v1' });
   await app.register(complianceRoutes, { prefix: '/v1' });
+  await app.register(productRoutes, { prefix: '/v1' });
+  await app.register(portalRoutes, { prefix: '/v1' });
 
   return app;
 }

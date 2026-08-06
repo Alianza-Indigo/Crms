@@ -26,6 +26,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@crms/agent-engine':
+        specifier: workspace:*
+        version: link:../../packages/agent-engine
       '@crms/ai-engine':
         specifier: workspace:*
         version: link:../../packages/ai-engine
@@ -41,6 +44,9 @@ importers:
       '@crms/billing':
         specifier: workspace:*
         version: link:../../packages/billing
+      '@crms/builder-engine':
+        specifier: workspace:*
+        version: link:../../packages/builder-engine
       '@crms/compliance':
         specifier: workspace:*
         version: link:../../packages/compliance
@@ -68,6 +74,9 @@ importers:
       '@crms/idempotency':
         specifier: workspace:*
         version: link:../../packages/idempotency
+      '@crms/import-engine':
+        specifier: workspace:*
+        version: link:../../packages/import-engine
       '@crms/integration-engine':
         specifier: workspace:*
         version: link:../../packages/integration-engine
@@ -77,6 +86,9 @@ importers:
       '@crms/permissions':
         specifier: workspace:*
         version: link:../../packages/permissions
+      '@crms/portal-engine':
+        specifier: workspace:*
+        version: link:../../packages/portal-engine
       '@crms/realtime':
         specifier: workspace:*
         version: link:../../packages/realtime
@@ -89,6 +101,9 @@ importers:
       '@crms/schema-engine':
         specifier: workspace:*
         version: link:../../packages/schema-engine
+      '@crms/search-engine':
+        specifier: workspace:*
+        version: link:../../packages/search-engine
       '@crms/tenant-context':
         specifier: workspace:*
         version: link:../../packages/tenant-context
@@ -157,6 +172,9 @@ importers:
       '@crms/events':
         specifier: workspace:*
         version: link:../../packages/events
+      '@crms/import-engine':
+        specifier: workspace:*
+        version: link:../../packages/import-engine
       '@crms/kernel':
         specifier: workspace:*
         version: link:../../packages/kernel
@@ -188,6 +206,31 @@ importers:
       typescript:
         specifier: ^5.7.3
         version: 5.9.3
+
+  packages/agent-engine:
+    dependencies:
+      '@crms/ai-engine':
+        specifier: workspace:*
+        version: link:../ai-engine
+      '@crms/database':
+        specifier: workspace:*
+        version: link:../database
+      '@crms/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@crms/records-engine':
+        specifier: workspace:*
+        version: link:../records-engine
+      '@crms/tenant-context':
+        specifier: workspace:*
+        version: link:../tenant-context
+    devDependencies:
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.20.1)
 
   packages/ai-engine:
     dependencies:
@@ -318,6 +361,34 @@ importers:
       '@crms/tenant-context':
         specifier: workspace:*
         version: link:../tenant-context
+    devDependencies:
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.20.1)
+
+  packages/builder-engine:
+    dependencies:
+      '@crms/database':
+        specifier: workspace:*
+        version: link:../database
+      '@crms/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@crms/permissions':
+        specifier: workspace:*
+        version: link:../permissions
+      '@crms/records-engine':
+        specifier: workspace:*
+        version: link:../records-engine
+      '@crms/tenant-context':
+        specifier: workspace:*
+        version: link:../tenant-context
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
     devDependencies:
       typescript:
         specifier: ^5.7.3
@@ -564,6 +635,28 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.20.1)
 
+  packages/import-engine:
+    dependencies:
+      '@crms/database':
+        specifier: workspace:*
+        version: link:../database
+      '@crms/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@crms/records-engine':
+        specifier: workspace:*
+        version: link:../records-engine
+      '@crms/tenant-context':
+        specifier: workspace:*
+        version: link:../tenant-context
+    devDependencies:
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.20.1)
+
   packages/integration-engine:
     dependencies:
       '@crms/credential-engine':
@@ -641,6 +734,31 @@ importers:
       '@crms/kernel':
         specifier: workspace:*
         version: link:../kernel
+      '@crms/tenant-context':
+        specifier: workspace:*
+        version: link:../tenant-context
+    devDependencies:
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.20.1)
+
+  packages/portal-engine:
+    dependencies:
+      '@crms/auth':
+        specifier: workspace:*
+        version: link:../auth
+      '@crms/database':
+        specifier: workspace:*
+        version: link:../database
+      '@crms/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@crms/records-engine':
+        specifier: workspace:*
+        version: link:../records-engine
       '@crms/tenant-context':
         specifier: workspace:*
         version: link:../tenant-context
@@ -761,6 +879,31 @@ importers:
         specifier: ^5.7.3
         version: 5.9.3
 
+  packages/search-engine:
+    dependencies:
+      '@crms/database':
+        specifier: workspace:*
+        version: link:../database
+      '@crms/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@crms/permissions':
+        specifier: workspace:*
+        version: link:../permissions
+      '@crms/records-engine':
+        specifier: workspace:*
+        version: link:../records-engine
+      '@crms/tenant-context':
+        specifier: workspace:*
+        version: link:../tenant-context
+    devDependencies:
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.20.1)
+
   packages/storage:
     dependencies:
       '@crms/config':
@@ -857,6 +1000,9 @@ importers:
       '@crms/automation-engine':
         specifier: workspace:*
         version: link:../packages/automation-engine
+      '@crms/builder-engine':
+        specifier: workspace:*
+        version: link:../packages/builder-engine
       '@crms/compliance':
         specifier: workspace:*
         version: link:../packages/compliance
@@ -878,6 +1024,9 @@ importers:
       '@crms/events':
         specifier: workspace:*
         version: link:../packages/events
+      '@crms/import-engine':
+        specifier: workspace:*
+        version: link:../packages/import-engine
       '@crms/kernel':
         specifier: workspace:*
         version: link:../packages/kernel
@@ -893,6 +1042,9 @@ importers:
       '@crms/schema-engine':
         specifier: workspace:*
         version: link:../packages/schema-engine
+      '@crms/search-engine':
+        specifier: workspace:*
+        version: link:../packages/search-engine
       '@crms/tenant-context':
         specifier: workspace:*
         version: link:../packages/tenant-context

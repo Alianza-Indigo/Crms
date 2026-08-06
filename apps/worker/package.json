@@ -19,6 +19,7 @@
     "@crms/credential-engine": "workspace:*",
     "@crms/database": "workspace:*",
     "@crms/events": "workspace:*",
+    "@crms/import-engine": "workspace:*",
     "@crms/kernel": "workspace:*",
     "@crms/outbox": "workspace:*",
     "@crms/realtime": "workspace:*",

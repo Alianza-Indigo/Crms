@@ -171,6 +171,7 @@ CREATE TABLE "sessions" (
 	"user_id" text NOT NULL,
 	"token_hash" text NOT NULL,
 	"active_tenant_id" text,
+	"portal_id" text,
 	"device" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"ip" text,
 	"trusted" boolean DEFAULT false NOT NULL,
@@ -999,6 +1000,30 @@ CREATE TABLE "idempotency_store" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE "import_jobs" (
+	"id" text PRIMARY KEY NOT NULL,
+	"tenant_id" text NOT NULL,
+	"application_id" text NOT NULL,
+	"environment" text DEFAULT 'production' NOT NULL,
+	"module_id" text NOT NULL,
+	"format" text DEFAULT 'csv' NOT NULL,
+	"status" text DEFAULT 'pending' NOT NULL,
+	"mapping" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"dedupe_field" text,
+	"update_existing" boolean DEFAULT false NOT NULL,
+	"payload" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"storage_key" text,
+	"total" integer DEFAULT 0 NOT NULL,
+	"created" integer DEFAULT 0 NOT NULL,
+	"updated" integer DEFAULT 0 NOT NULL,
+	"failed" integer DEFAULT 0 NOT NULL,
+	"errors" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"started_at" timestamp with time zone,
+	"finished_at" timestamp with time zone,
+	"created_by" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE "notifications" (
 	"id" text PRIMARY KEY NOT NULL,
 	"tenant_id" text NOT NULL,
@@ -1211,6 +1236,7 @@ CREATE INDEX "audit_events_tenant_idx" ON "audit_events" USING btree ("tenant_id
 CREATE INDEX "audit_events_resource_idx" ON "audit_events" USING btree ("tenant_id","resource_type","resource_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "idempotency_unique_idx" ON "idempotency_store" USING btree ("tenant_id","application_id","environment","operation","key");--> statement-breakpoint
 CREATE INDEX "idempotency_expiry_idx" ON "idempotency_store" USING btree ("expires_at");--> statement-breakpoint
+CREATE INDEX "import_jobs_tenant_idx" ON "import_jobs" USING btree ("tenant_id","status");--> statement-breakpoint
 CREATE INDEX "notifications_user_idx" ON "notifications" USING btree ("tenant_id","user_id","read_at");--> statement-breakpoint
 CREATE INDEX "notifications_delivery_idx" ON "notifications" USING btree ("status","channel");--> statement-breakpoint
 CREATE INDEX "outbox_dispatch_idx" ON "outbox_messages" USING btree ("status","next_attempt_at");--> statement-breakpoint

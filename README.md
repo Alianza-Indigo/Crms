@@ -227,9 +227,31 @@ the deterministic ones are covered by tests:
 - **SDK + UI** — `@crms/sdk` typed API client; `@crms/ui` tokens + components.
 - **Deploy** — Dockerfile (api/worker/web), `railway.json`, `vercel.json`.
 
+## Product surface (engines + API)
+
+The tenant-facing product engines are implemented, wired to the API, and tested:
+
+- **Views** (`builder-engine`) — definitions + `runView`; kanban groups by stage,
+  others return a scoped page. (test)
+- **Forms** — internal + public forms; public submission creates/updates a record
+  (dedup-aware), the form being the anonymous-intake authorization boundary. (test)
+- **Pipelines** — stage machine with valid-transition + required-field + role
+  enforcement. (test)
+- **Dashboards** — widget aggregation (count/sum/avg, group-by reserved or dynamic
+  fields) over the records tables. (test)
+- **Search** (`search-engine`) — tenant-scoped lexical search over titles + field
+  values, permission-filtered. (test)
+- **Import** (`import-engine`) — CSV/JSON → map → validate → dedup/update, async via
+  a worker job. (test)
+- **Portals** (`portal-engine`) — external user register/login; data access scoped
+  to the portal's exposed modules and the user's own records.
+- **Agents** (`agent-engine`) — tool-use loop bound to the agent's service-account
+  identity, so every tool call passes the same permission checks; budget + module
+  limits enforced.
+
 ## Scope note
 
-Security-critical, data, and engine paths are implemented and tested. Still ahead
-as product surface (UI-heavy, not infra): visual view/form/dashboard builders,
-the portals runtime, full-text/semantic search, the import pipeline, and the
-tenant-facing agent runtime.
+The platform is feature-complete against the PRD's engine + product surface. What
+remains is polish that doesn't change capability: richer visual builder UIs in the
+web app (the API + engines back them today), pixel-perfect PDF/QR layout, and
+semantic search (a BYO-embeddings layer over the same result shape).

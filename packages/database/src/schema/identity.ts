@@ -143,6 +143,8 @@ export const sessions = pgTable(
     tokenHash: text('token_hash').notNull(),
     /** Active tenant selected for this session. */
     activeTenantId: text('active_tenant_id'),
+    /** For external portal sessions: the portal this session is scoped to (§19). */
+    portalId: text('portal_id'),
     device: jsonb('device').notNull().default({}),
     ip: text('ip'),
     trusted: boolean('trusted').notNull().default(false),
