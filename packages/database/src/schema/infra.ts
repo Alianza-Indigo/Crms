@@ -173,10 +173,20 @@ export const notifications = pgTable(
     title: text('title').notNull(),
     body: text('body'),
     data: jsonb('data').notNull().default({}),
+    /** Delivery state for non-in-app channels (PRD §31): pending|sent|failed. */
+    status: text('status').notNull().default('pending'),
+    attempts: integer('attempts').notNull().default(0),
+    lastError: text('last_error'),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    /** Recipient address for the channel (email/phone/webhook), when external. */
+    recipient: text('recipient'),
     readAt: timestamp('read_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index('notifications_user_idx').on(t.tenantId, t.userId, t.readAt)],
+  (t) => [
+    index('notifications_user_idx').on(t.tenantId, t.userId, t.readAt),
+    index('notifications_delivery_idx').on(t.status, t.channel),
+  ],
 );
 
 /**

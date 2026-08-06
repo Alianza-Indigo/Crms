@@ -1,10 +1,22 @@
 import postgres from 'postgres';
-import { getPool } from '@crms/database';
 import { loadEnv } from '@crms/config';
 import { createLogger } from '@crms/kernel';
 import { registerMigrationProvider, type MigrationProvider } from './index.js';
 
 const logger = createLogger('tenant-migration:pg');
+
+/**
+ * Migration DDL (CREATE SCHEMA/TABLE) + cross-tenant copy require an admin role,
+ * not the app's NOSUPERUSER/NOBYPASSRLS role. Use CRMS_ADMIN_DATABASE_URL (the
+ * migration/owner role) when set; otherwise fall back to DATABASE_URL.
+ */
+let _admin: postgres.Sql | null = null;
+function getPool(): postgres.Sql {
+  if (_admin) return _admin;
+  const url = process.env.CRMS_ADMIN_DATABASE_URL ?? loadEnv().DATABASE_URL;
+  _admin = postgres(url, { max: 4, idle_timeout: 20, prepare: false, onnotice: () => {} });
+  return _admin;
+}
 
 /**
  * Real Postgres migration provider (PRD §6.3). Physically copies a tenant's data
@@ -150,7 +162,7 @@ export class PostgresMigrationProvider implements MigrationProvider {
       if (hasUpdatedAt[0]?.n === '0') continue;
       await sql.unsafe(
         `insert into "${schema}"."${table}" select * from public."${table}"
-         where tenant_id = $1 and updated_at > $2 on conflict (id) do nothing`,
+         where tenant_id = $1 and updated_at > $2 on conflict do nothing`,
         [input.tenantId, since.toISOString()],
       );
     }

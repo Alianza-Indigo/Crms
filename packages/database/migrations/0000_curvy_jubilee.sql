@@ -786,6 +786,26 @@ CREATE TABLE "automation_runs" (
 	"sync_version" text DEFAULT '1' NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE "document_signatures" (
+	"id" text PRIMARY KEY NOT NULL,
+	"tenant_id" text NOT NULL,
+	"application_id" text NOT NULL,
+	"document_id" text NOT NULL,
+	"signer_email" text NOT NULL,
+	"signer_name" text,
+	"token" text NOT NULL,
+	"status" text DEFAULT 'pending' NOT NULL,
+	"signature_data" text,
+	"signed_at" timestamp with time zone,
+	"ip" text,
+	"created_by" text,
+	"updated_by" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"deleted_at" timestamp with time zone,
+	"sync_version" text DEFAULT '1' NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE "document_templates" (
 	"id" text PRIMARY KEY NOT NULL,
 	"tenant_id" text NOT NULL,
@@ -988,6 +1008,11 @@ CREATE TABLE "notifications" (
 	"title" text NOT NULL,
 	"body" text,
 	"data" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"status" text DEFAULT 'pending' NOT NULL,
+	"attempts" integer DEFAULT 0 NOT NULL,
+	"last_error" text,
+	"sent_at" timestamp with time zone,
+	"recipient" text,
 	"read_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
@@ -1171,6 +1196,8 @@ CREATE INDEX "automation_defs_app_idx" ON "automation_definitions" USING btree (
 CREATE INDEX "automation_runs_status_idx" ON "automation_runs" USING btree ("tenant_id","status");--> statement-breakpoint
 CREATE INDEX "automation_runs_automation_idx" ON "automation_runs" USING btree ("automation_id");--> statement-breakpoint
 CREATE INDEX "automation_runs_resume_idx" ON "automation_runs" USING btree ("resume_at");--> statement-breakpoint
+CREATE UNIQUE INDEX "document_signatures_token_idx" ON "document_signatures" USING btree ("token");--> statement-breakpoint
+CREATE INDEX "document_signatures_doc_idx" ON "document_signatures" USING btree ("document_id");--> statement-breakpoint
 CREATE INDEX "document_templates_app_idx" ON "document_templates" USING btree ("tenant_id","application_id","environment");--> statement-breakpoint
 CREATE INDEX "generated_documents_template_idx" ON "generated_documents" USING btree ("template_id");--> statement-breakpoint
 CREATE INDEX "portal_defs_app_idx" ON "portal_definitions" USING btree ("tenant_id","application_id","environment");--> statement-breakpoint
@@ -1185,6 +1212,7 @@ CREATE INDEX "audit_events_resource_idx" ON "audit_events" USING btree ("tenant_
 CREATE UNIQUE INDEX "idempotency_unique_idx" ON "idempotency_store" USING btree ("tenant_id","application_id","environment","operation","key");--> statement-breakpoint
 CREATE INDEX "idempotency_expiry_idx" ON "idempotency_store" USING btree ("expires_at");--> statement-breakpoint
 CREATE INDEX "notifications_user_idx" ON "notifications" USING btree ("tenant_id","user_id","read_at");--> statement-breakpoint
+CREATE INDEX "notifications_delivery_idx" ON "notifications" USING btree ("status","channel");--> statement-breakpoint
 CREATE INDEX "outbox_dispatch_idx" ON "outbox_messages" USING btree ("status","next_attempt_at");--> statement-breakpoint
 CREATE INDEX "outbox_tenant_idx" ON "outbox_messages" USING btree ("tenant_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "subscriptions_tenant_idx" ON "subscriptions" USING btree ("tenant_id");--> statement-breakpoint

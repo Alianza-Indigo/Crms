@@ -206,9 +206,30 @@ For hostile multi-tenant script isolation, register an isolated-vm/Deno/
 Firecracker runner via the same `registerRunner` seam; for pixel-perfect PDFs,
 register a headless-Chrome renderer via `registerPdfRenderer`.
 
+## Completed depth (engine layer)
+
+All previously-partial engine items are now fully implemented + typechecked, and
+the deterministic ones are covered by tests:
+
+- **Tenant migration** — real Postgres copy: schema-tier replicates tables + RLS,
+  dedicated-tier streams rows to a separate DB; checksums, delta, cutover,
+  cleanup. (test)
+- **Config lifecycle** — version diff, application clone (remapped ids),
+  rollback-to-version. (test: clone)
+- **Documents** — QR codes embedded in HTML + PDF; e-signature request + public
+  token sign flow. (test: QR)
+- **Notifications delivery** — worker dispatches email (SMTP), Slack, WhatsApp,
+  SMS (Twilio), webhook via the tenant's BYO credentials, with retries.
+- **White-label runtime** — host → tenant/portal branding resolution; the web app
+  themes itself from it.
+- **Compliance (DSAR)** — subject data export to storage + erasure/anonymization,
+  legal-hold aware. (test)
+- **SDK + UI** — `@crms/sdk` typed API client; `@crms/ui` tokens + components.
+- **Deploy** — Dockerfile (api/worker/web), `railway.json`, `vercel.json`.
+
 ## Scope note
 
-Security-critical and data paths are implemented and tested. Still ahead as
-product surface (not infra): visual view/form/dashboard builders, portals
-runtime, full-text/semantic search, the import pipeline, and the tenant-facing
-agent runtime.
+Security-critical, data, and engine paths are implemented and tested. Still ahead
+as product surface (UI-heavy, not infra): visual view/form/dashboard builders,
+the portals runtime, full-text/semantic search, the import pipeline, and the
+tenant-facing agent runtime.

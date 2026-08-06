@@ -1,4 +1,4 @@
-import { pgTable, text, jsonb, boolean, timestamp, index, integer } from 'drizzle-orm/pg-core';
+import { pgTable, text, jsonb, boolean, timestamp, index, integer, uniqueIndex } from 'drizzle-orm/pg-core';
 import { lifecycleColumns, actorColumns } from './_shared';
 import { automationStatusEnum, runStatusEnum } from './enums';
 
@@ -112,6 +112,34 @@ export const generatedDocuments = pgTable(
     ...lifecycleColumns,
   },
   (t) => [index('generated_documents_template_idx').on(t.templateId)],
+);
+
+/**
+ * DocumentSignature (PRD §21). One signer's e-signature request for a generated
+ * document. A one-time token authorizes a public sign page; the signature data
+ * (typed name or drawn image) + audit fields are recorded on completion.
+ */
+export const documentSignatures = pgTable(
+  'document_signatures',
+  {
+    id: text('id').primaryKey(),
+    tenantId: text('tenant_id').notNull(),
+    applicationId: text('application_id').notNull(),
+    documentId: text('document_id').notNull(),
+    signerEmail: text('signer_email').notNull(),
+    signerName: text('signer_name'),
+    token: text('token').notNull(),
+    status: text('status').notNull().default('pending'), // pending | signed | declined
+    signatureData: text('signature_data'),
+    signedAt: timestamp('signed_at', { withTimezone: true }),
+    ip: text('ip'),
+    ...actorColumns,
+    ...lifecycleColumns,
+  },
+  (t) => [
+    uniqueIndex('document_signatures_token_idx').on(t.token),
+    index('document_signatures_doc_idx').on(t.documentId),
+  ],
 );
 
 /**

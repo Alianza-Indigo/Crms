@@ -41,18 +41,41 @@ function stripTags(s: string): string {
     .trim();
 }
 
+function extractImages(html: string): { html: string; images: Buffer[] } {
+  const images: Buffer[] = [];
+  const stripped = html.replace(/<img[^>]*src=["']data:image\/[^;]+;base64,([^"']+)["'][^>]*>/gi, (_m, b64: string) => {
+    try {
+      images.push(Buffer.from(b64, 'base64'));
+    } catch {
+      /* skip bad image */
+    }
+    return '';
+  });
+  return { html: stripped, images };
+}
+
 class PdfKitRenderer implements PdfRenderer {
   render(html: string): Promise<Buffer> {
     return new Promise((resolve, reject) => {
       try {
+        const { html: textHtml, images } = extractImages(html);
         const doc = new PDFDocument({ size: 'A4', margin: 56 });
         const chunks: Buffer[] = [];
         doc.on('data', (c: Buffer) => chunks.push(c));
         doc.on('end', () => resolve(Buffer.concat(chunks)));
         doc.on('error', reject);
-        for (const block of htmlToBlocks(html)) {
+        for (const block of htmlToBlocks(textHtml)) {
           if (block.heading) doc.moveDown(0.5).fontSize(16).text(block.text).moveDown(0.25).fontSize(11);
           else doc.fontSize(11).text(block.text).moveDown(0.5);
+        }
+        // Embed extracted images (e.g. QR codes) at the end of the document.
+        for (const img of images) {
+          doc.moveDown(0.5);
+          try {
+            doc.image(img, { fit: [160, 160] });
+          } catch {
+            /* unsupported image */
+          }
         }
         doc.end();
       } catch (err) {

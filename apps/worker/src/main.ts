@@ -9,6 +9,7 @@ import { archiveAuditLogs } from './audit-archiver.js';
 import { enqueueWebhookDeliveries, drainWebhookDeliveries } from './webhooks.js';
 import { refreshExpiringCredentials } from './credential-refresher.js';
 import { drainMigrationJobs } from './migration-runner.js';
+import { dispatchNotifications } from './notification-dispatcher.js';
 import { registerPostgresMigrationProvider } from '@crms/tenant-migration';
 import { publishEvent } from '@crms/realtime';
 
@@ -73,6 +74,7 @@ async function main(): Promise<void> {
     loop('automations', () => drainAutomationRuns(runAutomation, 20), 1000),
     loop('webhooks', () => drainWebhookDeliveries(25), 1000),
     loop('credential-refresh', () => refreshExpiringCredentials(), 60_000),
+    loop('notifications', () => dispatchNotifications(25), 2000),
     loop('audit-archive', () => archiveAuditLogs(), 60_000),
     loop('tenant-migration', () => drainMigrationJobs(), 10_000),
   ];

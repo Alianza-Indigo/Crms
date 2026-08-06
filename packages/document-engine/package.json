@@ -13,7 +13,8 @@
     "@crms/sandbox-engine": "workspace:*",
     "@crms/storage": "workspace:*",
     "@crms/tenant-context": "workspace:*",
-    "pdfkit": "^0.15.2"
+    "pdfkit": "^0.15.2",
+    "qrcode": "^1.5.4"
   },
-  "devDependencies": { "@types/pdfkit": "^0.13.9", "typescript": "^5.7.3", "vitest": "^2.1.8" }
+  "devDependencies": { "@types/pdfkit": "^0.13.9", "@types/qrcode": "^1.5.5", "typescript": "^5.7.3", "vitest": "^2.1.8" }
 }

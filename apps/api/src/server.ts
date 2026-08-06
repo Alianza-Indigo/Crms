@@ -17,6 +17,9 @@ import { platformRoutes } from './routes/platform.js';
 import { adminRoutes } from './routes/admin.js';
 import { automationRoutes } from './routes/automations.js';
 import { realtimeRoutes } from './routes/realtime.js';
+import { documentRoutes } from './routes/documents.js';
+import { whitelabelRoutes } from './routes/whitelabel.js';
+import { complianceRoutes } from './routes/compliance.js';
 
 const logger = createLogger('api');
 
@@ -54,6 +57,9 @@ export async function buildServer() {
   await app.register(adminRoutes, { prefix: '/v1' });
   await app.register(automationRoutes, { prefix: '/v1' });
   await app.register(realtimeRoutes, { prefix: '/v1' });
+  await app.register(documentRoutes, { prefix: '/v1' });
+  await app.register(whitelabelRoutes, { prefix: '/v1' });
+  await app.register(complianceRoutes, { prefix: '/v1' });
 
   return app;
 }

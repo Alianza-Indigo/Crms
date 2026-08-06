@@ -3,6 +3,10 @@ import { newId, NotFound, createLogger } from '@crms/kernel';
 import { getContext } from '@crms/tenant-context';
 import { evaluateFormula } from '@crms/sandbox-engine';
 import { tenantKey, putObject } from '@crms/storage';
+import { embedQrCodes } from './qr.js';
+
+export * from './qr.js';
+export * from './signature.js';
 
 const logger = createLogger('document-engine');
 
@@ -77,7 +81,9 @@ export async function generateDocument(input: {
   if (!template) throw NotFound('DocumentTemplate', input.templateId);
 
   const body = (template.body as { html?: string }).html ?? '<html><body>{{title}}</body></html>';
-  const html = renderTemplate(body, input.data);
+  const rendered = renderTemplate(body, input.data);
+  // Resolve {{qr:...}} tokens into embedded QR images (PRD §21).
+  const html = await embedQrCodes(rendered, input.data);
 
   const output = input.output ?? 'pdf';
   let buffer: Buffer;

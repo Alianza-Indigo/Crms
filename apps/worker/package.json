@@ -6,6 +6,7 @@
   "main": "./src/main.ts",
   "scripts": {
     "dev": "tsx watch src/main.ts",
+    "serve": "tsx src/main.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/main.js",
     "typecheck": "tsc --noEmit",
@@ -22,7 +23,9 @@
     "@crms/outbox": "workspace:*",
     "@crms/realtime": "workspace:*",
     "@crms/tenant-context": "workspace:*",
-    "@crms/tenant-migration": "workspace:*"
+    "@crms/tenant-migration": "workspace:*",
+    "@crms/usage-metering": "workspace:*",
+    "nodemailer": "^6.9.16"
   },
-  "devDependencies": { "tsx": "^4.19.2", "typescript": "^5.7.3" }
+  "devDependencies": { "@types/nodemailer": "^6.4.17", "tsx": "^4.19.2", "typescript": "^5.7.3" }
 }
