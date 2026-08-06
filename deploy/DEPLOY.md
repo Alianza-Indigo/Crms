@@ -10,6 +10,11 @@ Everything runs on Railway. There are two topologies — pick one:
 Both build from the same repo and the same multi-purpose `Dockerfile`
 (`--build-arg APP=all|api|worker|web|migrate`); only the build arg differs.
 
+**The repo ships a root `railway.json`** (Dockerfile builder + `/health` check)
+and the Dockerfile **defaults to `APP=all`**, so deploying the repo to Railway
+creates **one all-in-one service automatically** — no Root Directory, Builder,
+or `APP` variable to set. Option A just adds the databases + secrets below.
+
 ---
 
 ## Data services (both options)
@@ -33,29 +38,41 @@ superusers bypass RLS, so the app must never connect as the admin:**
 
 ## Option A — single service ⭐ (recommended to start)
 
-One Railway service. Deploy from the repo with Dockerfile build arg **`APP=all`**.
+Because of the root `railway.json` + Dockerfile `APP=all` default, this is mostly
+automatic. Click order:
+
+1. **New Project → Deploy from GitHub repo →** this repo. Railway reads
+   `railway.json`, builds the Dockerfile as **one** service. (If a monorepo split
+   ever created `@crms/api` / `@crms/web` / `@crms/worker`, delete the extras and
+   keep one — or delete all and re-add; with `railway.json` present it comes up as
+   a single service.)
+2. **+ New → Database → PostgreSQL**, then **+ New → Database → Redis**.
+3. On the app service → **Variables** → paste the block below.
+4. App service → **Settings → Networking → Generate Domain**, then set
+   `APP_BASE_URL` to that domain.
 
 Variables:
 ```
-DATABASE_URL=<App URL>                 # crms_app — RLS enforced
-CRMS_ADMIN_DATABASE_URL=<Admin URL>    # on-boot migration + tenant DDL
-REDIS_URL=<from plugin>
-PLATFORM_MASTER_KEY, JWT_SECRET        (referenced)
-
-RUN_MIGRATIONS_ON_BOOT=true
-CRMS_APP_ROLE=crms_app
+DATABASE_URL=postgres://crms_app:${APP_DB_PASSWORD}@${{Postgres.PGHOST}}:${{Postgres.PGPORT}}/${{Postgres.PGDATABASE}}
+CRMS_ADMIN_DATABASE_URL=${{Postgres.DATABASE_URL}}
+REDIS_URL=${{Redis.REDIS_URL}}
+PLATFORM_MASTER_KEY=<generated>
+JWT_SECRET=<generated>
+APP_DB_PASSWORD=<your strong password>
 CRMS_APP_ROLE_PASSWORD=${APP_DB_PASSWORD}
-
 APP_BASE_URL=https://<this-service-domain>
 # optional: GOOGLE_*, OIDC_*, STRIPE_*, S3_*, SANDBOX_RUNNER
 ```
-- Railway injects `PORT`; **Next.js** binds it and serves the UI. Requests to
-  `/v1/*` and `/webhooks/*` are proxied in-container to the **API** on
-  `INTERNAL_API_PORT` (default 4000). The **worker** runs in the same container.
+Defaults baked in (no need to set): `APP=all`, `RUN_MIGRATIONS_ON_BOOT=true`,
+`CRMS_APP_ROLE=crms_app`, internal API port `4000`.
+
+- Railway injects `PORT`; **Next.js** binds it and serves the UI, proxying
+  `/v1/*`, `/webhooks/*` and `/health` in-container to the **API** on 4000. The
+  **worker** runs in the same container.
 - On boot it applies migrations + RLS **and creates the `crms_app`
   NOBYPASSRLS role** (idempotent), so the DB is deploy-ready with no extra step.
-- No `API_BASE_URL` build arg needed — the browser calls this same origin.
-- Healthcheck: `/health`. Expose the public domain.
+- The browser calls this same origin — no `API_BASE_URL` to set.
+- Healthcheck `/health` (300s grace for the on-boot migration).
 
 That's it. One service, one domain, RLS enforced.
 

@@ -23,7 +23,11 @@ COPY tests ./tests
 COPY deploy ./deploy
 RUN pnpm install --frozen-lockfile
 
-ARG APP=api
+# Default to the single-service "all" build (api + worker + web + on-boot
+# migrations in one container) so a bare `docker build` / Railway deploy yields
+# the whole platform. Split deploys override this per service (APP=api|worker|
+# web|migrate), e.g. deploy/docker-compose.prod.yml.
+ARG APP=all
 ENV APP=${APP}
 
 # The web bundle inlines NEXT_PUBLIC_API_BASE_URL at build. For "web" pass the
