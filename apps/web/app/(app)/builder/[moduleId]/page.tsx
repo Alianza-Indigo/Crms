@@ -1,114 +1,87 @@
 'use client';
 
-import { use, useEffect, useState } from 'react';
+import { use, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { getClient } from '../../../../lib/crms';
+import { FieldsTab, type Field } from '../../../../components/builder/FieldsTab';
+import { ViewsTab } from '../../../../components/builder/ViewsTab';
+import { FormsTab } from '../../../../components/builder/FormsTab';
+import { PipelinesTab } from '../../../../components/builder/PipelinesTab';
+import { RelationsTab } from '../../../../components/builder/RelationsTab';
 
-interface Field {
+interface ModuleRef {
   id: string;
-  key: string;
   name: string;
-  type: string;
-  required: boolean;
 }
+const TABS = ['Campos', 'Vistas', 'Formularios', 'Pipelines', 'Relaciones'] as const;
+type Tab = (typeof TABS)[number];
 
-const FIELD_TYPES = ['text_short', 'text_long', 'integer', 'decimal', 'currency', 'date', 'datetime', 'email', 'phone', 'url', 'boolean', 'select', 'status', 'user'];
-
-/** Module detail: fields list + add field (PRD §11). */
+/** Module hub (PRD §43.2): fields + views + forms + pipelines + relations. */
 export default function ModulePage({ params }: { params: Promise<{ moduleId: string }> }) {
   const { moduleId } = use(params);
+  const [tab, setTab] = useState<Tab>('Campos');
+  const [modules, setModules] = useState<ModuleRef[]>([]);
+  const [relations, setRelations] = useState<Array<{ id: string; name: string }>>([]);
   const [fields, setFields] = useState<Field[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState({ key: '', name: '', type: 'text_short', required: false });
+  const [moduleName, setModuleName] = useState('');
 
-  async function load() {
-    try {
-      setFields(await getClient().request<Field[]>('GET', `/modules/${moduleId}/fields`));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error');
-    }
-  }
-  useEffect(() => {
-    load();
+  const refresh = useCallback(async () => {
+    const client = getClient();
+    const [mods, rels, flds] = await Promise.all([
+      client.modules.list().catch(() => []),
+      client.relations.list().catch(() => []),
+      client.modules.listFields(moduleId).catch(() => []),
+    ]);
+    setModules(mods as ModuleRef[]);
+    setRelations(rels as Array<{ id: string; name: string }>);
+    setFields(flds as unknown as Field[]);
+    setModuleName((mods as ModuleRef[]).find((m) => m.id === moduleId)?.name ?? 'Módulo');
   }, [moduleId]);
 
-  async function addField(e: React.FormEvent) {
-    e.preventDefault();
-    try {
-      const config = form.type === 'select' || form.type === 'status' ? { options: [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }] } : {};
-      await getClient().modules.createField(moduleId, { ...form, config });
-      setForm({ key: '', name: '', type: 'text_short', required: false });
-      await load();
-    } catch (e2) {
-      setError(e2 instanceof Error ? e2.message : 'Error');
-    }
-  }
+  useEffect(() => {
+    refresh();
+  }, [refresh, tab]);
 
   return (
     <div style={{ display: 'grid', gap: '1.25rem' }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.6rem' }}>
         <div>
           <Link href="/builder" className="muted" style={{ textDecoration: 'none' }}>
             ← Módulos
           </Link>
-          <h1 style={{ margin: '0.3rem 0 0' }}>Campos</h1>
+          <h1 style={{ margin: '0.3rem 0 0' }}>{moduleName}</h1>
         </div>
         <Link className="btn" href={`/data/${moduleId}`}>
           Ver datos →
         </Link>
       </header>
 
-      {error && <div className="card" style={{ borderColor: '#7f1d1d', color: '#f87171' }}>{error}</div>}
+      <nav style={{ display: 'flex', gap: '0.3rem', borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
+        {TABS.map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              borderBottom: tab === t ? '2px solid var(--accent)' : '2px solid transparent',
+              color: tab === t ? 'var(--fg)' : 'var(--muted)',
+              padding: '0.6rem 0.8rem',
+              cursor: 'pointer',
+              fontWeight: 600,
+              fontSize: '0.95rem',
+            }}
+          >
+            {t}
+          </button>
+        ))}
+      </nav>
 
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr style={{ textAlign: 'left', color: 'var(--muted)' }}>
-              <th style={{ padding: '0.6rem 0.9rem' }}>Nombre</th>
-              <th>Clave</th>
-              <th>Tipo</th>
-              <th>Requerido</th>
-            </tr>
-          </thead>
-          <tbody>
-            {fields.map((f) => (
-              <tr key={f.id} style={{ borderTop: '1px solid var(--border)' }}>
-                <td style={{ padding: '0.6rem 0.9rem' }}>{f.name}</td>
-                <td>
-                  <code className="muted">{f.key}</code>
-                </td>
-                <td>
-                  <span className="badge">{f.type}</span>
-                </td>
-                <td>{f.required ? 'Sí' : '—'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <form onSubmit={addField} className="card" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto auto auto', gap: '0.6rem', alignItems: 'end' }}>
-        <label>
-          Nombre
-          <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-        </label>
-        <label>
-          Clave
-          <input className="input" value={form.key} onChange={(e) => setForm({ ...form, key: e.target.value })} required />
-        </label>
-        <label>
-          Tipo
-          <select className="input" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
-            {FIELD_TYPES.map((t) => (
-              <option key={t}>{t}</option>
-            ))}
-          </select>
-        </label>
-        <label style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-          <input type="checkbox" checked={form.required} onChange={(e) => setForm({ ...form, required: e.target.checked })} /> Req.
-        </label>
-        <button className="btn">+ Campo</button>
-      </form>
+      {tab === 'Campos' && <FieldsTab moduleId={moduleId} modules={modules} relations={relations} />}
+      {tab === 'Vistas' && <ViewsTab moduleId={moduleId} fields={fields} />}
+      {tab === 'Formularios' && <FormsTab moduleId={moduleId} fields={fields} />}
+      {tab === 'Pipelines' && <PipelinesTab moduleId={moduleId} fields={fields} />}
+      {tab === 'Relaciones' && <RelationsTab moduleId={moduleId} modules={modules.filter((m) => m.id !== moduleId)} />}
     </div>
   );
 }
