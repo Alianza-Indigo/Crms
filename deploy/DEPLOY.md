@@ -1,80 +1,121 @@
 # Deploying CRMS on Railway
 
-Everything runs on Railway — **web + api + worker + Postgres + Redis**. Vercel is
-optional (frontend-only) and not required.
+Everything runs on Railway. There are two topologies — pick one:
 
-The whole platform is a single repo built from one multi-purpose `Dockerfile`
-(`--build-arg APP=api|worker|web|migrate`), so each Railway service points at the
-same repo with a different build arg.
+- **Option A — single service (simplest, fewest to manage).** One service runs
+  api + worker + web + on-boot migrations in one container. **1 service + Postgres + Redis.**
+- **Option B — split services (scale each independently).** Separate `api`,
+  `worker`, `web`, and a one-shot `migrate`. **4 services + Postgres + Redis.**
 
-## 1. Provision data services
+Both build from the same repo and the same multi-purpose `Dockerfile`
+(`--build-arg APP=all|api|worker|web|migrate`); only the build arg differs.
+
+---
+
+## Data services (both options)
 In your Railway project, add:
-- **PostgreSQL** plugin → gives `DATABASE_URL` (this user is a superuser).
+- **PostgreSQL** plugin → gives `DATABASE_URL` (this user is a superuser / admin).
 - **Redis** plugin → gives `REDIS_URL`.
 
-## 2. Shared variables (set on the project, referenced by services)
+Generate two secrets once and set them as shared project variables:
 ```
 PLATFORM_MASTER_KEY   # node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 JWT_SECRET            # node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"
-APP_DB_PASSWORD       # password for the least-privilege app role
+APP_DB_PASSWORD       # any strong password for the least-privilege app role
 ```
 
-Derive two DB URLs from the Railway Postgres:
-- **Admin URL** = the plugin's `DATABASE_URL` (superuser) → used by `migrate` and
-  by tenant-migration DDL (`CRMS_ADMIN_DATABASE_URL`).
-- **App URL** = same host/db but user `crms_app` and `APP_DB_PASSWORD` → used by
-  `api` and `worker` so **RLS is enforced** (superusers bypass RLS).
+Two DB URLs are derived from the Railway Postgres — **the split matters because
+superusers bypass RLS, so the app must never connect as the admin:**
+- **Admin URL** = the plugin's `DATABASE_URL` (superuser) → migrations + tenant DDL.
+- **App URL** = same host/db but user `crms_app` and `APP_DB_PASSWORD` → api/worker.
 
-## 3. Service: `migrate` (run once per schema change)
-- Deploy from repo, Dockerfile build arg `APP=migrate`.
-- Variables:
-  ```
-  DATABASE_URL=<Admin URL>
-  PLATFORM_MASTER_KEY, JWT_SECRET   (referenced)
-  CRMS_APP_ROLE=crms_app
-  CRMS_APP_ROLE_PASSWORD=${APP_DB_PASSWORD}
-  ```
-- It applies migrations + RLS **and creates the `crms_app` NOSUPERUSER
-  NOBYPASSRLS role with grants** — one command, DB is deploy-ready.
-- Set it as a one-off / pre-deploy job (no restart).
+---
 
-## 4. Service: `api`
-- Build arg `APP=api`. Variables:
-  ```
-  DATABASE_URL=<App URL>                 # crms_app — RLS enforced
-  CRMS_ADMIN_DATABASE_URL=<Admin URL>    # for tenant tier-2/3 migrations
-  REDIS_URL=<from plugin>
-  PLATFORM_MASTER_KEY, JWT_SECRET
-  APP_BASE_URL=https://<web-domain>
-  API_BASE_URL=https://<api-domain>
-  # optional: GOOGLE_*, OIDC_*, STRIPE_*, S3_*, SANDBOX_RUNNER
-  ```
-- Railway injects `PORT`; the API binds it automatically. Healthcheck: `/health`.
+## Option A — single service ⭐ (recommended to start)
 
-## 5. Service: `worker`
-- Build arg `APP=worker`. Same DB/Redis/secret variables as `api`
-  (no HTTP port; it runs the background loops). No healthcheck.
+One Railway service. Deploy from the repo with Dockerfile build arg **`APP=all`**.
 
-## 6. Service: `web`
-- Build arg `APP=web` **plus a build arg** `API_BASE_URL=https://<api-domain>`
-  (the API URL is inlined into the browser bundle at build time).
-- Railway injects `PORT`; `next start` binds it. Expose the public domain.
+Variables:
+```
+DATABASE_URL=<App URL>                 # crms_app — RLS enforced
+CRMS_ADMIN_DATABASE_URL=<Admin URL>    # on-boot migration + tenant DDL
+REDIS_URL=<from plugin>
+PLATFORM_MASTER_KEY, JWT_SECRET        (referenced)
 
-## Order
-`migrate` → then `api` + `worker` + `web`. Re-run `migrate` after any schema
-change (it's idempotent).
+RUN_MIGRATIONS_ON_BOOT=true
+CRMS_APP_ROLE=crms_app
+CRMS_APP_ROLE_PASSWORD=${APP_DB_PASSWORD}
+
+APP_BASE_URL=https://<this-service-domain>
+# optional: GOOGLE_*, OIDC_*, STRIPE_*, S3_*, SANDBOX_RUNNER
+```
+- Railway injects `PORT`; **Next.js** binds it and serves the UI. Requests to
+  `/v1/*` and `/webhooks/*` are proxied in-container to the **API** on
+  `INTERNAL_API_PORT` (default 4000). The **worker** runs in the same container.
+- On boot it applies migrations + RLS **and creates the `crms_app`
+  NOBYPASSRLS role** (idempotent), so the DB is deploy-ready with no extra step.
+- No `API_BASE_URL` build arg needed — the browser calls this same origin.
+- Healthcheck: `/health`. Expose the public domain.
+
+That's it. One service, one domain, RLS enforced.
+
+---
+
+## Option B — split services (scale each part independently)
+
+### 1. Service `migrate` (run once per schema change)
+Build arg `APP=migrate`. Variables:
+```
+DATABASE_URL=<Admin URL>
+CRMS_APP_ROLE=crms_app
+CRMS_APP_ROLE_PASSWORD=${APP_DB_PASSWORD}
+PLATFORM_MASTER_KEY, JWT_SECRET
+```
+Applies migrations + RLS and creates the `crms_app` role. Set as a one-off /
+pre-deploy job (no restart). Idempotent — re-run after any schema change.
+
+### 2. Service `api`
+Build arg `APP=api`. Variables:
+```
+DATABASE_URL=<App URL>                 # crms_app — RLS enforced
+CRMS_ADMIN_DATABASE_URL=<Admin URL>    # tenant tier-2/3 migrations
+REDIS_URL=<from plugin>
+PLATFORM_MASTER_KEY, JWT_SECRET
+APP_BASE_URL=https://<web-domain>
+API_BASE_URL=https://<api-domain>
+# optional: GOOGLE_*, OIDC_*, STRIPE_*, S3_*, SANDBOX_RUNNER
+```
+Railway injects `PORT`; the API binds it. Healthcheck: `/health`.
+
+### 3. Service `worker`
+Build arg `APP=worker`. Same DB/Redis/secret variables as `api` (no HTTP port).
+
+### 4. Service `web`
+Build arg `APP=web` **plus a build arg** `API_BASE_URL=https://<api-domain>`
+(the API URL is inlined into the browser bundle at build time). Railway injects
+`PORT`; `next start` binds it. Expose the public domain.
+
+**Order:** `migrate` → then `api` + `worker` + `web`.
+
+---
 
 ## Self-host / local prod check
-The identical topology runs locally:
+The identical topologies run locally with Docker Compose:
 ```
 cd deploy && cp .env.prod.example .env   # fill in secrets
+
+# Option A (single service):
+docker compose -f docker-compose.allinone.yml up --build
+# everything -> http://localhost:8080   health -> http://localhost:8080/health
+
+# Option B (split services):
 docker compose -f docker-compose.prod.yml up --build
-# web → http://localhost:3000   api → http://localhost:4000/health
+# web -> http://localhost:3000   api -> http://localhost:4000/health
 ```
 
 ## Notes
 - **RLS depends on connecting as `crms_app`** (NOBYPASSRLS). Never point the app
-  services at the superuser URL.
+  at the superuser URL.
 - Files/documents/DSAR exports need an S3-compatible bucket (`S3_*`). Add a
   Railway volume + MinIO service, or use Cloudflare R2 / AWS S3.
 - Feature flags for Stripe/OIDC/Google/SMTP activate as soon as their credentials

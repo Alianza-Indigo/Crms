@@ -1,0 +1,85 @@
+# ============================================================================
+# Single-service topology — the whole platform (api + worker + web + on-boot
+# migrations) in ONE container, plus Postgres + Redis. This mirrors deploying a
+# single Railway service with build arg APP=all.
+#
+#   cd deploy && cp .env.prod.example .env && docker compose -f docker-compose.allinone.yml up --build
+#   web + api (same origin) -> http://localhost:8080   health -> /health
+#
+# The `app` container connects to Postgres as the least-privilege crms_app role
+# (RLS enforced) for api/worker, and uses the admin role only for the on-boot
+# migration that creates that role and runs DDL.
+# ============================================================================
+name: crms-allinone
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: crms
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-crms}
+      POSTGRES_DB: crms
+    volumes:
+      - pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crms -d crms"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        APP: all
+    environment:
+      # api/worker connect as the least-privilege role -> RLS enforced.
+      DATABASE_URL: postgres://crms_app:${APP_DB_PASSWORD:-crms_app}@postgres:5432/crms
+      # migrate-on-boot + tenant DDL use the admin role.
+      CRMS_ADMIN_DATABASE_URL: postgres://crms:${POSTGRES_PASSWORD:-crms}@postgres:5432/crms
+      REDIS_URL: redis://redis:6379
+      PLATFORM_MASTER_KEY: ${PLATFORM_MASTER_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      # On-boot migration creates the crms_app role with this password.
+      RUN_MIGRATIONS_ON_BOOT: "true"
+      CRMS_APP_ROLE: crms_app
+      CRMS_APP_ROLE_PASSWORD: ${APP_DB_PASSWORD:-crms_app}
+      # Public port (Next.js). The API runs internally on port 4000.
+      PORT: 8080
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8080}
+      # Optional integrations (activate features by adding credentials).
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      OIDC_ISSUER: ${OIDC_ISSUER:-}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_PRICES: ${STRIPE_PRICES:-{}}
+      SANDBOX_RUNNER: ${SANDBOX_RUNNER:-off}
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_BUCKET: ${S3_BUCKET:-crms-platform}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  pg:
+  redis:
