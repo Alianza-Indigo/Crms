@@ -1,6 +1,6 @@
 import { and, eq, schema, withElevated } from '@crms/database';
 import { loadEnv } from '@crms/config';
-import { newId, newToken, Unauthenticated, Forbidden, ValidationError, NotFound, createLogger } from '@crms/kernel';
+import { newId, newToken, Unauthenticated, Forbidden, NoActiveTenant, ValidationError, NotFound, createLogger } from '@crms/kernel';
 import { runWithBuiltContext, buildContext, type TenantContext } from '@crms/tenant-context';
 import { audit } from '@crms/audit';
 import { hashPassword, verifyPassword, validatePasswordPolicy } from './password.js';
@@ -121,7 +121,7 @@ export class AuthService {
         }
       }
 
-      if (!session.activeTenantId) throw Forbidden('No active tenant selected');
+      if (!session.activeTenantId) throw NoActiveTenant();
       const [membership] = await tx
         .select()
         .from(schema.memberships)

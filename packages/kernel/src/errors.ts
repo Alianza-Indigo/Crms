@@ -16,6 +16,7 @@ export type ErrorCode =
   | 'CREDENTIAL_MISSING'
   | 'DESTRUCTIVE_UNCONFIRMED'
   | 'TENANT_CONTEXT_MISSING'
+  | 'NO_ACTIVE_TENANT'
   | 'CROSS_TENANT'
   | 'CROSS_APPLICATION'
   | 'DEPENDENCY_FAILED'
@@ -34,6 +35,7 @@ const STATUS: Record<ErrorCode, number> = {
   CREDENTIAL_MISSING: 422,
   DESTRUCTIVE_UNCONFIRMED: 428,
   TENANT_CONTEXT_MISSING: 500,
+  NO_ACTIVE_TENANT: 403,
   CROSS_TENANT: 403,
   CROSS_APPLICATION: 403,
   DEPENDENCY_FAILED: 502,
@@ -83,6 +85,9 @@ export const Conflict = (message: string, details?: Record<string, unknown>) =>
   new AppError('CONFLICT', message, { details });
 export const TenantContextMissing = () =>
   new AppError('TENANT_CONTEXT_MISSING', 'Operation attempted without an active tenant context', { expose: false });
+/** The session is authenticated but no tenant is selected yet (needs onboarding). */
+export const NoActiveTenant = (message = 'No active tenant selected') =>
+  new AppError('NO_ACTIVE_TENANT', message);
 export const CrossTenant = (message = 'Cross-tenant access is not allowed') =>
   new AppError('CROSS_TENANT', message);
 export const CrossApplication = (message = 'Applications cannot access each other directly; use API/Webhook/Automation/Integration') =>
