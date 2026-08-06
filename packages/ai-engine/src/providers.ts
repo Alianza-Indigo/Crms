@@ -34,36 +34,64 @@ export async function chat(opts: ChatOptions): Promise<ChatResult> {
     key: opts.credentialKey,
     credentialId: opts.credentialId,
   });
-  const model = opts.model ?? (credential.metadata.defaultModel as string) ?? defaultModel(opts.provider);
+  // The credential itself is authoritative about which provider to call — the
+  // caller's `provider` is only a fallback. This lets the UI pick a credential
+  // by key without also having to send a matching provider string.
+  const provider = (credential.provider as string) || opts.provider;
+  const o: ChatOptions = { ...opts, provider };
+  const model = opts.model ?? (credential.metadata.defaultModel as string) ?? defaultModel(provider);
+  const endpoint = credential.metadata.endpoint as string | undefined;
 
-  if (opts.provider === 'anthropic') {
-    return anthropicChat(secret, model, opts);
+  if (provider === 'anthropic') {
+    return anthropicChat(secret, model, o);
+  }
+  // Google Gemini via its OpenAI-compatible endpoint (same request/response shape).
+  if (provider === 'google_ai' || provider === 'gemini' || provider === 'google') {
+    return openAiStyleChat(endpoint ?? 'https://generativelanguage.googleapis.com/v1beta/openai', secret, model, o);
   }
   // OpenAI + Azure OpenAI + any OpenAI-compatible endpoint.
-  return openaiChat(secret, model, opts, credential.metadata.endpoint as string | undefined);
+  return openaiChat(secret, model, o, endpoint);
 }
 
 function defaultModel(provider: string): string {
   switch (provider) {
     case 'anthropic':
       return 'claude-sonnet-4-5';
+    case 'google_ai':
+    case 'gemini':
+    case 'google':
+      return 'gemini-2.0-flash';
     case 'openai':
     default:
       return 'gpt-4o';
   }
 }
 
-async function openaiChat(
+function openaiChat(
   secret: Record<string, unknown>,
   model: string,
   opts: ChatOptions,
   endpoint?: string,
 ): Promise<ChatResult> {
-  const base = endpoint ?? 'https://api.openai.com';
-  const res = await meteredFetch(opts.provider, `${base}/v1/chat/completions`, {
+  // OpenAI's chat path lives under /v1; a custom endpoint is a host base.
+  return openAiStyleChat(`${endpoint ?? 'https://api.openai.com'}/v1`, secret, model, opts);
+}
+
+/**
+ * OpenAI-shaped Chat Completions call. Works for OpenAI, Azure OpenAI, any
+ * OpenAI-compatible gateway, and Google Gemini's OpenAI-compat endpoint — they
+ * only differ in the base URL that precedes `/chat/completions`.
+ */
+async function openAiStyleChat(
+  baseUrl: string,
+  secret: Record<string, unknown>,
+  model: string,
+  opts: ChatOptions,
+): Promise<ChatResult> {
+  const res = await meteredFetch(opts.provider, `${baseUrl}/chat/completions`, {
     method: 'POST',
     kind: 'ai_tokens',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${secret.apiKey}` },
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${secret.apiKey as string}` },
     body: JSON.stringify({
       model,
       messages: opts.messages,

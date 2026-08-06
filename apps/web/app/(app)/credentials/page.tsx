@@ -75,8 +75,19 @@ export default function CredentialsPage() {
           <label>
             Proveedor
             <select className="input" value={form.provider} onChange={(e) => setForm({ ...form, provider: e.target.value })}>
-              {['openai', 'anthropic', 'stripe', 'slack', 'whatsapp', 'twilio', 'smtp', 'google_ai'].map((p) => (
-                <option key={p}>{p}</option>
+              {[
+                ['openai', 'OpenAI'],
+                ['anthropic', 'Anthropic (Claude)'],
+                ['google_ai', 'Google Gemini'],
+                ['stripe', 'Stripe'],
+                ['slack', 'Slack'],
+                ['whatsapp', 'WhatsApp'],
+                ['twilio', 'Twilio'],
+                ['smtp', 'SMTP (correo)'],
+              ].map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
               ))}
             </select>
           </label>
