@@ -1,0 +1,30 @@
+{
+  "name": "crms",
+  "version": "3.0.0",
+  "private": true,
+  "description": "Multi-tenant, AI-driven enterprise platform for building CRMs and business applications without code (BYO credentials).",
+  "license": "UNLICENSED",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --parallel",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:isolation": "vitest run --dir tests/isolation",
+    "db:generate": "pnpm --filter @crms/database db:generate",
+    "db:migrate": "pnpm --filter @crms/database db:migrate",
+    "db:seed": "pnpm --filter @crms/database db:seed",
+    "clean": "turbo run clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "tsx": "^4.19.2",
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8"
+  }
+}

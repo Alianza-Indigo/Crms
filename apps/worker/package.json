@@ -1,0 +1,25 @@
+{
+  "name": "@crms/worker",
+  "version": "3.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/main.ts",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist .turbo"
+  },
+  "dependencies": {
+    "@crms/audit": "workspace:*",
+    "@crms/automation-engine": "workspace:*",
+    "@crms/config": "workspace:*",
+    "@crms/database": "workspace:*",
+    "@crms/events": "workspace:*",
+    "@crms/kernel": "workspace:*",
+    "@crms/outbox": "workspace:*",
+    "@crms/tenant-context": "workspace:*"
+  },
+  "devDependencies": { "tsx": "^4.19.2", "typescript": "^5.7.3" }
+}

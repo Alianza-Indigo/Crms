@@ -1,0 +1,23 @@
+{
+  "name": "@crms/tests",
+  "version": "3.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@crms/audit": "workspace:*",
+    "@crms/config": "workspace:*",
+    "@crms/credential-engine": "workspace:*",
+    "@crms/database": "workspace:*",
+    "@crms/kernel": "workspace:*",
+    "@crms/permissions": "workspace:*",
+    "@crms/records-engine": "workspace:*",
+    "@crms/schema-engine": "workspace:*",
+    "@crms/sandbox-engine": "workspace:*",
+    "@crms/tenant-context": "workspace:*"
+  },
+  "devDependencies": { "typescript": "^5.7.3", "vitest": "^2.1.8" }
+}
