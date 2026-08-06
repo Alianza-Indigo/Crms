@@ -8,6 +8,8 @@ import { drainAutomationRuns } from './automation-runner.js';
 import { archiveAuditLogs } from './audit-archiver.js';
 import { enqueueWebhookDeliveries, drainWebhookDeliveries } from './webhooks.js';
 import { refreshExpiringCredentials } from './credential-refresher.js';
+import { drainMigrationJobs } from './migration-runner.js';
+import { registerPostgresMigrationProvider } from '@crms/tenant-migration';
 import { publishEvent } from '@crms/realtime';
 
 const logger = createLogger('worker');
@@ -64,6 +66,7 @@ function sleep(ms: number): Promise<void> {
 
 async function main(): Promise<void> {
   logger.info('CRMS worker starting');
+  registerPostgresMigrationProvider();
 
   const loops = [
     loop('outbox', () => dispatchBatch(handleEvent, 50), 1000),
@@ -71,6 +74,7 @@ async function main(): Promise<void> {
     loop('webhooks', () => drainWebhookDeliveries(25), 1000),
     loop('credential-refresh', () => refreshExpiringCredentials(), 60_000),
     loop('audit-archive', () => archiveAuditLogs(), 60_000),
+    loop('tenant-migration', () => drainMigrationJobs(), 10_000),
   ];
 
   const shutdown = async () => {

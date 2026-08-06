@@ -166,6 +166,9 @@ importers:
       '@crms/tenant-context':
         specifier: workspace:*
         version: link:../../packages/tenant-context
+      '@crms/tenant-migration':
+        specifier: workspace:*
+        version: link:../../packages/tenant-migration
     devDependencies:
       tsx:
         specifier: ^4.19.2
@@ -761,6 +764,9 @@ importers:
       '@crms/kernel':
         specifier: workspace:*
         version: link:../kernel
+      postgres:
+        specifier: ^3.4.5
+        version: 3.4.9
     devDependencies:
       typescript:
         specifier: ^5.7.3

@@ -124,3 +124,5 @@ export async function runMigration(jobId: string): Promise<void> {
   await setPhase(jobId, 'done', { status: 'succeeded', finishedAt: new Date() });
   logger.info({ jobId }, 'Migration completed (cleanup scheduled after rollback window)');
 }
+
+export * from './postgres-provider.js';

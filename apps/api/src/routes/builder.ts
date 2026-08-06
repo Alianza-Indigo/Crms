@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { eq, schema, withTenant } from '@crms/database';
 import { getContext } from '@crms/tenant-context';
 import { schemaEngine } from '@crms/schema-engine';
+import { diffVersions, cloneApplication, rollbackToVersion } from '@crms/deployment-engine';
 import { authed } from '../lib/context.js';
 
 /**
@@ -72,6 +73,36 @@ export async function builderRoutes(app: FastifyInstance): Promise<void> {
       const body = z.object({ version: z.string(), changelog: z.string().optional() }).parse(req.body);
       const versionId = await schemaEngine.publish(body.version, body.changelog);
       return { versionId };
+    }),
+  );
+
+  // Config lifecycle (PRD §8.4): diff / clone / rollback.
+  app.get(
+    '/applications/:appId/diff',
+    authed(async (req) => {
+      const { appId } = req.params as { appId: string };
+      const q = z.object({ a: z.string(), b: z.string() }).parse(req.query);
+      return diffVersions(appId, q.a, q.b);
+    }),
+  );
+
+  app.post(
+    '/applications/:appId/clone',
+    authed(async (req) => {
+      const { appId } = req.params as { appId: string };
+      const body = z.object({ name: z.string() }).parse(req.body);
+      const newAppId = await cloneApplication(appId, body.name);
+      return { applicationId: newAppId };
+    }),
+  );
+
+  app.post(
+    '/applications/:appId/rollback',
+    authed(async (req) => {
+      const { appId } = req.params as { appId: string };
+      const body = z.object({ version: z.string() }).parse(req.body);
+      await rollbackToVersion(appId, body.version);
+      return { ok: true };
     }),
   );
 }

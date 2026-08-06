@@ -132,3 +132,5 @@ export async function promote(manifestId: string): Promise<void> {
   });
   logger.info({ manifestId }, 'Deployment promoted');
 }
+
+export * from './lifecycle.js';

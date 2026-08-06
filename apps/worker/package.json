@@ -21,7 +21,8 @@
     "@crms/kernel": "workspace:*",
     "@crms/outbox": "workspace:*",
     "@crms/realtime": "workspace:*",
-    "@crms/tenant-context": "workspace:*"
+    "@crms/tenant-context": "workspace:*",
+    "@crms/tenant-migration": "workspace:*"
   },
   "devDependencies": { "tsx": "^4.19.2", "typescript": "^5.7.3" }
 }
