@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api, setToken } from '../../lib/api';
+import { getClient } from '../../lib/crms';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -25,7 +26,9 @@ export default function LoginPage() {
         body: JSON.stringify({ email, password }),
       });
       setToken(res.token);
-      router.push('/builder');
+      // If the account has no organization yet, go through onboarding first.
+      const apps = await getClient().applications.list().catch(() => []);
+      router.push(apps.length ? '/builder' : '/onboarding');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error');
     } finally {

@@ -11,6 +11,8 @@
     "clean": "rm -rf .next .turbo"
   },
   "dependencies": {
+    "@crms/sdk": "workspace:*",
+    "@crms/ui": "workspace:*",
     "next": "^15.1.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
