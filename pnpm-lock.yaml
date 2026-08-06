@@ -136,6 +136,9 @@ importers:
       '@crms/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@crms/credential-engine':
+        specifier: workspace:*
+        version: link:../../packages/credential-engine
       '@crms/database':
         specifier: workspace:*
         version: link:../../packages/database
@@ -602,6 +605,9 @@ importers:
       '@crms/permissions':
         specifier: workspace:*
         version: link:../permissions
+      '@crms/sandbox-engine':
+        specifier: workspace:*
+        version: link:../sandbox-engine
       '@crms/tenant-context':
         specifier: workspace:*
         version: link:../tenant-context

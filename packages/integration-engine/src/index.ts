@@ -5,6 +5,8 @@ import { getContext } from '@crms/tenant-context';
 import { credentialManager } from '@crms/credential-engine';
 import { meteredFetch } from '@crms/usage-metering';
 
+export * from './templates.js';
+
 const logger = createLogger('integration-engine');
 
 /**

@@ -76,8 +76,10 @@ reviewer can verify coverage.
 - Document render: `packages/document-engine`.
 
 ## Security (§32)
-- Auth (scrypt, sessions, TOTP MFA, impersonation with hard expiry + audit
-  trail): `packages/auth`.
+- Auth (scrypt email/password + Google OAuth, sessions, API keys → service
+  accounts, impersonation with hard expiry + audit trail; MFA intentionally
+  unused): `packages/auth`. API-key vs session resolution in
+  `apps/api/src/lib/context.ts`.
 - Audit (append-only, secret redaction, lifecycle archival): `packages/audit`.
 - Error sanitization: `kernel/errors.ts` + `apps/api/src/lib/errors.ts`.
 - Secret redaction in logs: `kernel/logger.ts`.

@@ -20,10 +20,13 @@ export const users = pgTable(
     type: userTypeEnum('type').notNull().default('internal'),
     locale: text('locale').notNull().default('es'),
     timezone: text('timezone').notNull().default('UTC'),
-    /** MFA (PRD §32.1). Secret stored encrypted; only metadata here. */
-    mfaEnabled: boolean('mfa_enabled').notNull().default(false),
-    mfaSecretRef: text('mfa_secret_ref'),
-    recoveryCodesRef: text('recovery_codes_ref'),
+    /**
+     * Federated identity (PRD §32.1). Login is by email/password OR Google
+     * OAuth; a Google account is linked by its stable `sub` claim. MFA is
+     * intentionally not used.
+     */
+    oauthProvider: text('oauth_provider'),
+    oauthSubject: text('oauth_subject'),
     isPlatformAdmin: boolean('is_platform_admin').notNull().default(false),
     failedLoginAttempts: text('failed_login_attempts').notNull().default('0'),
     lockedUntil: timestamp('locked_until', { withTimezone: true }),

@@ -1,5 +1,5 @@
 {
-  "id": "a678323e-ecf4-4896-b366-77e2223217d4",
+  "id": "b6504adc-a95d-40a3-bb9b-0dfcb3a920ed",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -1422,21 +1422,14 @@
           "notNull": true,
           "default": "'UTC'"
         },
-        "mfa_enabled": {
-          "name": "mfa_enabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "mfa_secret_ref": {
-          "name": "mfa_secret_ref",
+        "oauth_provider": {
+          "name": "oauth_provider",
           "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "recovery_codes_ref": {
-          "name": "recovery_codes_ref",
+        "oauth_subject": {
+          "name": "oauth_subject",
           "type": "text",
           "primaryKey": false,
           "notNull": false

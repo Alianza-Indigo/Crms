@@ -140,19 +140,52 @@ export class AiPlanService {
   }
 
   private async applyOperation(op: AiOperation): Promise<unknown> {
+    // Generated plans reference modules by key; resolve to ids at execution.
+    const args = await resolveModuleKeys(op.args);
     switch (op.op) {
       case 'create_module':
-        return schemaEngine.createModule(op.args as never);
+        return schemaEngine.createModule(args as never);
       case 'create_field':
-        return schemaEngine.createField(op.args as never);
+        return schemaEngine.createField(args as never);
       case 'create_relation':
-        return schemaEngine.createRelation(op.args as never);
+        return schemaEngine.createRelation(args as never);
       case 'delete_field':
-        return schemaEngine.deleteField(op.args.fieldId as string, { confirm: true });
+        return schemaEngine.deleteField(args.fieldId as string, { confirm: true });
       default:
         return { skipped: op.op, reason: 'operation not yet supported' };
     }
   }
+}
+
+/** Resolve module keys → ids within the current app/env (for generated plans). */
+async function resolveModuleKeys(args: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const ctx = getContext();
+  if (!ctx.applicationId) return args;
+  const out = { ...args };
+  const map: Array<[string, string]> = [
+    ['moduleKey', 'moduleId'],
+    ['sourceModuleKey', 'sourceModuleId'],
+    ['targetModuleKey', 'targetModuleId'],
+  ];
+  for (const [keyField, idField] of map) {
+    const key = args[keyField];
+    if (typeof key !== 'string' || out[idField]) continue;
+    const mod = await withTenant(async (tx) => {
+      const [row] = await tx
+        .select()
+        .from(schema.moduleDefinitions)
+        .where(
+          and(
+            eq(schema.moduleDefinitions.applicationId, ctx.applicationId!),
+            eq(schema.moduleDefinitions.environment, ctx.environment),
+            eq(schema.moduleDefinitions.key, key),
+          ),
+        );
+      return row ?? null;
+    });
+    if (mod) out[idField] = mod.id;
+  }
+  return out;
 }
 
 export const aiPlanService = new AiPlanService();

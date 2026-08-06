@@ -1,4 +1,5 @@
 export * from './password.js';
-export * from './totp.js';
 export * from './token.js';
+export * from './google.js';
+export * from './apikey.js';
 export * from './service.js';

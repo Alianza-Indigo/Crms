@@ -28,6 +28,12 @@ const EnvSchema = z.object({
 
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
 
+  // Google OAuth (platform-level login, PRD §32.1). Optional: when unset, the
+  // Google login endpoints report that OAuth is not configured.
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
+  GOOGLE_REDIRECT_URI: z.string().url().optional(),
+
   APP_BASE_URL: z.string().url().default('http://localhost:3000'),
   API_BASE_URL: z.string().url().default('http://localhost:4000'),
   WEBHOOK_BASE_URL: z.string().url().default('http://localhost:4000/webhooks'),

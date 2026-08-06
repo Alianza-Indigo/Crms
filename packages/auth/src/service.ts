@@ -49,7 +49,6 @@ export class AuthService {
   async login(input: {
     email: string;
     password: string;
-    totp?: string;
     device?: Record<string, unknown>;
     ip?: string;
   }): Promise<SessionResult> {
@@ -69,11 +68,6 @@ export class AuthService {
           })
           .where(eq(schema.users.id, user.id));
         throw Unauthenticated('Invalid credentials');
-      }
-
-      if (user.mfaEnabled) {
-        if (!input.totp) throw Unauthenticated('MFA code required');
-        // MFA secret is stored via credential-engine ref; verification wired in API.
       }
 
       const token = newToken(32);
@@ -202,6 +196,16 @@ export class AuthService {
         .where(eq(schema.sessions.id, session.id));
     });
     logger.warn({ by: input.targetUserId }, 'Impersonation started');
+  }
+
+  /** End an impersonation session immediately (PRD §32.5). */
+  async stopImpersonation(token: string): Promise<void> {
+    await withElevated(async (tx) => {
+      await tx
+        .update(schema.sessions)
+        .set({ impersonatedUserId: null, impersonatedBy: null, impersonationExpiresAt: null })
+        .where(eq(schema.sessions.tokenHash, hashToken(token)));
+    });
   }
 
   /** Run a callback within a resolved context (used by workers/tests). */

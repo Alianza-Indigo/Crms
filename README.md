@@ -50,7 +50,7 @@ packages/
   feature-flags       Targeted flags + rollout (§44.1)
   usage-metering      Usage Metering Proxy — metrics only, no content (§29.1)
   billing             SaaS subscriptions, strictly separated from tenant pay (§26)
-  auth                Sessions, scrypt, TOTP MFA, impersonation (§32)
+  auth                Sessions, scrypt + Google OAuth, API keys, impersonation (§32)
 
 tests/                Tenant-isolation, credential-secrecy, formula suites
 ```
@@ -152,11 +152,38 @@ Frontend + short web requests on **Vercel**; the persistent API, workers, queues
 Postgres and Redis on **Railway** (PRD §35). The whole platform is portable via
 Docker + environment variables (`docker compose` here mirrors that).
 
+## Authentication
+
+- **Email + password** (scrypt) and **Google OAuth 2.0** (set `GOOGLE_CLIENT_ID`
+  / `GOOGLE_CLIENT_SECRET`; the login page hides the Google button when unset).
+- **API keys** bound to service accounts (`crms_<prefix>_<secret>`, hash-stored,
+  scoped, revocable) authenticate machine callers on the same Bearer header.
+- **Impersonation** is platform-admin only, time-boxed, fully audited, and shows
+  a permanent red banner + countdown in the UI.
+- **MFA is intentionally not used.**
+
+## Implemented depth (completed since the core)
+
+- Record operations: create/read/update/archive/**restore/duplicate/assign/
+  transfer/approve/reject/lock/unlock** + **computed fields** (formula, rollup,
+  count, autonumber) — covered by tests.
+- **Webhook delivery** worker (HMAC signing, retries + backoff, dead-letter,
+  replay endpoint) fed by the outbox — webhooks never fire in the write txn.
+- **Credential OAuth refresh** worker: refreshes before expiry, and on failure
+  marks the credential invalid + pauses dependent automations (never falls back
+  to another credential).
+- **Tenant tier routing**: Tier-3 dedicated pools + Tier-2 schema `search_path`,
+  O(1) on the shared hot path.
+- **AI application generation**: natural-language → validated AIPlan → review →
+  approve → execute (BYO provider).
+- Automations: edge/branch traversal + notify action; official connector
+  templates (Slack/Stripe/WhatsApp/Gmail/Mercado Pago/Telegram).
+
 ## Scope note
 
-This is the architectural core with every domain wired and the security-critical
-paths fully implemented and tested. Areas intentionally left with a clean
-extension point (documented inline) rather than a full build: the out-of-process
-script isolate runner, the headless-PDF renderer, live OAuth dances for every
-provider, and the realtime gateway. Each has a registered-provider seam so it
-plugs in without re-architecture.
+Security-critical and data paths are implemented and tested. Areas intentionally
+left with a clean, registered-provider seam (documented inline) rather than a
+full build: the out-of-process script isolate runner, the headless-PDF renderer,
+and the realtime gateway. Still ahead as product surface: visual view/form/
+dashboard builders, portals runtime, full-text/semantic search, import pipeline,
+and the tenant-facing agent runtime.

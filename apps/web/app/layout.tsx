@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
+import { ImpersonationBanner } from '../components/ImpersonationBanner';
 
 /**
  * Root layout (PRD §34.1, §27). Registers the PWA manifest and a theme; the app
@@ -22,7 +23,10 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es">
-      <body>{children}</body>
+      <body>
+        <ImpersonationBanner />
+        {children}
+      </body>
     </html>
   );
 }

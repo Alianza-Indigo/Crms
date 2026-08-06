@@ -2,7 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { and, eq, schema, withElevated } from '@crms/database';
 import { newId } from '@crms/kernel';
-import { authService } from '@crms/auth';
+import { authService, buildAuthUrl, handleCallback, isGoogleConfigured } from '@crms/auth';
+import { loadEnv } from '@crms/config';
 import { createSubscription } from '@crms/billing';
 import { pub, authed } from '../lib/context.js';
 
@@ -23,11 +24,36 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   app.post(
     '/auth/login',
     pub(async (req) => {
-      const body = z
-        .object({ email: z.string().email(), password: z.string(), totp: z.string().optional() })
-        .parse(req.body);
+      const body = z.object({ email: z.string().email(), password: z.string() }).parse(req.body);
       const result = await authService.login({ ...body, ip: req.ip, device: { ua: req.headers['user-agent'] } });
       return result;
+    }),
+  );
+
+  // --- Google OAuth (PRD §32.1) ---
+  app.get(
+    '/auth/google/start',
+    pub(async (req, reply) => {
+      if (!isGoogleConfigured()) return { configured: false };
+      const returnPath = (req.query as { return?: string }).return;
+      const { url } = buildAuthUrl(returnPath);
+      // Return the URL (SPA redirects) — or 302 when hit directly in a browser.
+      if ((req.headers.accept ?? '').includes('text/html')) {
+        reply.redirect(url);
+        return;
+      }
+      return { url };
+    }),
+  );
+
+  app.get(
+    '/auth/google/callback',
+    pub(async (req, reply) => {
+      const q = z.object({ code: z.string(), state: z.string() }).parse(req.query);
+      const session = await handleCallback({ code: q.code, state: q.state, ip: req.ip });
+      // Redirect back to the web app with the session token in the fragment.
+      const base = loadEnv().APP_BASE_URL;
+      reply.redirect(`${base}/auth/complete#token=${session.token}&new=${session.isNewUser ? '1' : '0'}`);
     }),
   );
 

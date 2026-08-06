@@ -41,11 +41,36 @@ export function getDb(): Database {
 }
 
 export async function closeDb(): Promise<void> {
+  for (const pool of dedicatedPools.values()) await pool.sql.end({ timeout: 5 }).catch(() => {});
+  dedicatedPools.clear();
   if (_sql) {
     await _sql.end({ timeout: 5 });
     _sql = null;
     _db = null;
   }
+}
+
+/**
+ * Tenant tier routing (PRD §6.1-6.3). Tier-1 tenants share the default pool.
+ * Tier-3 tenants get a dedicated database registered here (at boot, from routing
+ * config); Tier-2 tenants get a dedicated schema via search_path. Resolution is
+ * an O(1) map lookup on the hot path, so shared tenants pay nothing.
+ */
+const dedicatedPools = new Map<string, { sql: postgres.Sql; db: Database }>();
+const tenantSchemas = new Map<string, string>();
+
+export function registerDedicatedTenant(tenantId: string, connectionUrl: string): void {
+  const s = postgres(connectionUrl, { max: 10, idle_timeout: 20, prepare: true, onnotice: () => {} });
+  dedicatedPools.set(tenantId, { sql: s, db: drizzle(s, { schema, logger: false }) });
+  logger.info({ tenantId }, 'Registered dedicated tenant database');
+}
+
+export function registerTenantSchema(tenantId: string, schemaName: string): void {
+  tenantSchemas.set(tenantId, schemaName);
+}
+
+function resolveDb(tenantId: string): Database {
+  return dedicatedPools.get(tenantId)?.db ?? getDb();
 }
 
 /**
@@ -59,7 +84,7 @@ export async function closeDb(): Promise<void> {
  */
 export async function withTenant<T>(fn: (tx: DbExecutor) => Promise<T>, ctx?: TenantContext): Promise<T> {
   const context = ctx ?? getContext();
-  const db = getDb();
+  const db = resolveDb(context.tenantId);
   return db.transaction(async (tx) => {
     await applyContextGucs(tx, context, false);
     return fn(tx);
@@ -73,7 +98,7 @@ export async function withTenant<T>(fn: (tx: DbExecutor) => Promise<T>, ctx?: Te
  */
 export async function withElevated<T>(fn: (tx: DbExecutor) => Promise<T>, ctx?: TenantContext): Promise<T> {
   const context = ctx ?? tryGetContext();
-  const db = getDb();
+  const db = context ? resolveDb(context.tenantId) : getDb();
   return db.transaction(async (tx) => {
     if (context) await applyContextGucs(tx, context, true);
     else await tx.execute(sql`SET LOCAL ${sql.raw(PG_CONTEXT.bypassRls)} = 'on'`);
@@ -88,6 +113,9 @@ async function applyContextGucs(tx: DbExecutor, ctx: TenantContext, bypass: bool
   await tx.execute(sql`select set_config(${PG_CONTEXT.environment}, ${ctx.environment}, true)`);
   await tx.execute(sql`select set_config(${PG_CONTEXT.userId}, ${ctx.userId ?? ctx.serviceAccountId ?? ''}, true)`);
   await tx.execute(sql`select set_config(${PG_CONTEXT.bypassRls}, ${bypass ? 'on' : 'off'}, true)`);
+  // Tier-2 (schema-isolated) tenants: confine to their schema for this txn.
+  const schemaName = tenantSchemas.get(ctx.tenantId);
+  if (schemaName) await tx.execute(sql`select set_config('search_path', ${schemaName + ', public'}, true)`);
 }
 
 export { schema, sql };

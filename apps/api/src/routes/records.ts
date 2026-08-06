@@ -75,6 +75,64 @@ export async function recordRoutes(app: FastifyInstance): Promise<void> {
     }),
   );
 
+  app.post(
+    '/modules/:moduleId/records/:recordId/restore',
+    authed(async (req) => {
+      const { moduleId, recordId } = req.params as { moduleId: string; recordId: string };
+      await recordsEngine.restore(moduleId, recordId);
+      return { ok: true };
+    }),
+  );
+
+  app.post(
+    '/modules/:moduleId/records/:recordId/duplicate',
+    authed(async (req) => {
+      const { moduleId, recordId } = req.params as { moduleId: string; recordId: string };
+      return recordsEngine.duplicate(moduleId, recordId);
+    }),
+  );
+
+  app.post(
+    '/modules/:moduleId/records/:recordId/assign',
+    authed(async (req) => {
+      const { moduleId, recordId } = req.params as { moduleId: string; recordId: string };
+      const body = z.object({ assigneeUserId: z.string().nullable() }).parse(req.body);
+      await recordsEngine.assign(moduleId, recordId, body.assigneeUserId);
+      return { ok: true };
+    }),
+  );
+
+  app.post(
+    '/modules/:moduleId/records/:recordId/transfer',
+    authed(async (req) => {
+      const { moduleId, recordId } = req.params as { moduleId: string; recordId: string };
+      const body = z.object({ ownerUserId: z.string() }).parse(req.body);
+      await recordsEngine.transfer(moduleId, recordId, body.ownerUserId);
+      return { ok: true };
+    }),
+  );
+
+  app.post(
+    '/modules/:moduleId/records/:recordId/approval',
+    authed(async (req) => {
+      const { moduleId, recordId } = req.params as { moduleId: string; recordId: string };
+      const body = z.object({ decision: z.enum(['approved', 'rejected']), reason: z.string().optional() }).parse(req.body);
+      await recordsEngine.setApproval(moduleId, recordId, body.decision, body.reason);
+      return { ok: true };
+    }),
+  );
+
+  app.post(
+    '/modules/:moduleId/records/:recordId/lock',
+    authed(async (req) => {
+      const { moduleId, recordId } = req.params as { moduleId: string; recordId: string };
+      const lock = (req.query as { unlock?: string }).unlock !== 'true';
+      if (lock) await recordsEngine.lock(moduleId, recordId);
+      else await recordsEngine.unlock(moduleId, recordId);
+      return { ok: true, locked: lock };
+    }),
+  );
+
   app.delete(
     '/modules/:moduleId/records/:recordId',
     authed(async (req) => {

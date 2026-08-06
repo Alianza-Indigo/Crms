@@ -12,6 +12,7 @@ import { recordRoutes } from './routes/records.js';
 import { credentialRoutes } from './routes/credentials.js';
 import { aiRoutes } from './routes/ai.js';
 import { platformRoutes } from './routes/platform.js';
+import { adminRoutes } from './routes/admin.js';
 
 const logger = createLogger('api');
 
@@ -42,6 +43,7 @@ export async function buildServer() {
   await app.register(credentialRoutes, { prefix: '/v1' });
   await app.register(aiRoutes, { prefix: '/v1' });
   await app.register(platformRoutes, { prefix: '/v1' });
+  await app.register(adminRoutes, { prefix: '/v1' });
 
   return app;
 }

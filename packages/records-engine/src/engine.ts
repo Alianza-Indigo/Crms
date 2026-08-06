@@ -6,6 +6,7 @@ import { buildEvent, EVENT_TYPES } from '@crms/events';
 import { writeEvent } from '@crms/outbox';
 import { requireScope, query, type QuerySpec } from './query-engine.js';
 import { validateValues } from './validation.js';
+import { computeSelfDerived, recomputeAggregates } from './compute.js';
 
 const logger = createLogger('records-engine');
 
@@ -61,9 +62,14 @@ export class RecordsEngine {
     const { normalized, projections } = await validateValues(fields, input.data, { mode: 'create' });
 
     const recordId = newId('record');
-    const displayTitle = this.deriveTitle(fields, normalized);
 
     return withTenant(async (tx) => {
+      // Compute formula/computed/autonumber fields before persisting (PRD §11.3).
+      const derived = await computeSelfDerived(tx, scope, input.moduleId, fields, normalized);
+      Object.assign(normalized, derived.values);
+      projections.push(...derived.projections);
+      const displayTitle = this.deriveTitle(fields, normalized);
+
       await tx.insert(schema.records).values({
         id: recordId,
         tenantId: scope.tenantId,
@@ -108,9 +114,17 @@ export class RecordsEngine {
     const fields = await this.loadFields(moduleId);
     const merged = { ...(current.data as Record<string, unknown>), ...patch };
     const { normalized, projections } = await validateValues(fields, merged, { mode: 'update' });
-    const changes = this.diff(current.data as Record<string, unknown>, normalized);
 
     return withTenant(async (tx) => {
+      // Recompute derived fields (formula/computed) + aggregates (rollup/count).
+      const derived = await computeSelfDerived(tx, scope, moduleId, fields, normalized);
+      Object.assign(normalized, derived.values);
+      projections.push(...derived.projections);
+      const agg = await recomputeAggregates(tx, scope, moduleId, recordId, fields);
+      Object.assign(normalized, agg.values);
+      projections.push(...agg.projections);
+      const changes = this.diff(current.data as Record<string, unknown>, normalized);
+
       await tx
         .update(schema.records)
         .set({
@@ -155,6 +169,74 @@ export class RecordsEngine {
       await tx.update(schema.records).set({ deletedAt: new Date() }).where(eq(schema.records.id, recordId));
       await tx.update(schema.recordValues).set({ deletedAt: new Date() }).where(eq(schema.recordValues.recordId, recordId));
       await writeEvent(tx, buildEvent({ type: EVENT_TYPES.recordDeleted, moduleId, recordId }));
+    });
+  }
+
+  async restore(moduleId: string, recordId: string): Promise<void> {
+    await assert('edit', { type: 'record', selector: moduleId });
+    await withTenant(async (tx) => {
+      await tx.update(schema.records).set({ archivedAt: null }).where(eq(schema.records.id, recordId));
+      await writeEvent(tx, buildEvent({ type: EVENT_TYPES.recordRestored, moduleId, recordId }));
+    });
+  }
+
+  /** Duplicate a record (PRD §12). Copies field data; new ownership/id. */
+  async duplicate(moduleId: string, recordId: string): Promise<typeof schema.records.$inferSelect> {
+    const current = await this.get(moduleId, recordId);
+    return this.create({
+      moduleId,
+      data: { ...(current.data as Record<string, unknown>) },
+      teamId: current.teamId ?? undefined,
+      branchId: current.branchId ?? undefined,
+    });
+  }
+
+  /** Assign to a user; transfer is the same op audited as ownership change. */
+  async assign(moduleId: string, recordId: string, assigneeUserId: string | null): Promise<void> {
+    const current = await this.get(moduleId, recordId);
+    await assert('assign', { type: 'record', selector: moduleId, ownerUserId: current.ownerUserId });
+    await withTenant(async (tx) => {
+      await tx.update(schema.records).set({ assigneeUserId }).where(eq(schema.records.id, recordId));
+      await writeEvent(tx, buildEvent({ type: EVENT_TYPES.recordUpdated, moduleId, recordId, changes: { assigneeUserId } }));
+    });
+  }
+
+  async transfer(moduleId: string, recordId: string, newOwnerUserId: string): Promise<void> {
+    const current = await this.get(moduleId, recordId);
+    await assert('assign', { type: 'record', selector: moduleId, ownerUserId: current.ownerUserId });
+    await withTenant(async (tx) => {
+      await tx.update(schema.records).set({ ownerUserId: newOwnerUserId }).where(eq(schema.records.id, recordId));
+      await writeEvent(
+        tx,
+        buildEvent({ type: EVENT_TYPES.recordUpdated, moduleId, recordId, changes: { ownerUserId: { from: current.ownerUserId, to: newOwnerUserId } } }),
+      );
+    });
+  }
+
+  /** Approve/reject move a record's approval state + emit the event (PRD §12). */
+  async setApproval(moduleId: string, recordId: string, decision: 'approved' | 'rejected', reason?: string): Promise<void> {
+    const current = await this.get(moduleId, recordId);
+    await assert('approve', { type: 'record', selector: moduleId, ownerUserId: current.ownerUserId });
+    await this.update(moduleId, recordId, { approval_status: decision, approval_reason: reason ?? null });
+    await withTenant(async (tx) => {
+      await writeEvent(tx, buildEvent({ type: EVENT_TYPES.approvalResponded, moduleId, recordId, payload: { decision, reason } }));
+    });
+  }
+
+  async lock(moduleId: string, recordId: string): Promise<void> {
+    const ctx = getContext();
+    const current = await this.get(moduleId, recordId);
+    await assert('edit', { type: 'record', selector: moduleId, ownerUserId: current.ownerUserId });
+    await withTenant(async (tx) => {
+      await tx.update(schema.records).set({ lockedAt: new Date(), lockedBy: ctx.userId }).where(eq(schema.records.id, recordId));
+    });
+  }
+
+  async unlock(moduleId: string, recordId: string): Promise<void> {
+    const current = await this.get(moduleId, recordId);
+    await assert('edit', { type: 'record', selector: moduleId, ownerUserId: current.ownerUserId });
+    await withTenant(async (tx) => {
+      await tx.update(schema.records).set({ lockedAt: null, lockedBy: null }).where(eq(schema.records.id, recordId));
     });
   }
 

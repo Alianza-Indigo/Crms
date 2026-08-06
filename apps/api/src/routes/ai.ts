@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { aiPlanService } from '@crms/ai-engine';
+import { aiPlanService, generatePlanFromPrompt } from '@crms/ai-engine';
 import { audit } from '@crms/audit';
 import { authed } from '../lib/context.js';
 
@@ -10,6 +10,20 @@ import { authed } from '../lib/context.js';
  * audited.
  */
 export async function aiRoutes(app: FastifyInstance): Promise<void> {
+  // Generate an application design from a natural-language description (PRD §9.1).
+  // Uses the tenant's BYO AI credential; returns a plan to review + approve.
+  app.post(
+    '/ai/generate',
+    authed(async (req) => {
+      const body = z
+        .object({ prompt: z.string().min(4), provider: z.string().default('openai'), credentialKey: z.string().optional(), credentialId: z.string().optional() })
+        .parse(req.body);
+      const result = await generatePlanFromPrompt(body);
+      await audit({ action: 'ai.generate', resourceType: 'ai_plan', resourceId: result.planId });
+      return result;
+    }),
+  );
+
   app.post(
     '/ai/plans',
     authed(async (req) => {
@@ -38,6 +52,4 @@ export async function aiRoutes(app: FastifyInstance): Promise<void> {
       return result;
     }),
   );
-
-  void z;
 }

@@ -51,6 +51,27 @@ export default function LoginPage() {
             {busy ? '…' : mode === 'login' ? 'Entrar' : 'Registrarme'}
           </button>
         </form>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '1rem 0' }}>
+          <hr style={{ flex: 1, borderColor: 'var(--border)' }} />
+          <span className="muted" style={{ fontSize: '0.8rem' }}>o</span>
+          <hr style={{ flex: 1, borderColor: 'var(--border)' }} />
+        </div>
+        <button
+          className="btn"
+          style={{ width: '100%', background: '#fff', color: '#111' }}
+          onClick={async () => {
+            try {
+              const res = await api<{ url?: string; configured?: boolean }>('/auth/google/start');
+              if (res.url) window.location.href = res.url;
+              else setError('Google OAuth no está configurado en este despliegue.');
+            } catch (e) {
+              setError(e instanceof Error ? e.message : 'Error');
+            }
+          }}
+        >
+          Continuar con Google
+        </button>
         <p className="muted" style={{ marginBottom: 0 }}>
           {mode === 'login' ? '¿No tienes cuenta? ' : '¿Ya tienes cuenta? '}
           <a onClick={() => setMode(mode === 'login' ? 'register' : 'login')} style={{ cursor: 'pointer' }}>

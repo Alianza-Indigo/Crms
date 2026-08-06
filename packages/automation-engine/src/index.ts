@@ -109,9 +109,9 @@ export async function runAutomation(runId: string): Promise<void> {
     while (current && guard++ < 100) {
       const result = await executeNode(current, context);
       history.push({ node: current.id, result });
+      context[`step_${current.id}`] = result;
       if (current.type === 'filter' && result === false) break; // filtered out
-      const nextId = (current.next ?? [])[0];
-      current = nextId ? nodeMap.get(nextId) : undefined;
+      current = nextNode(graph, nodeMap, current, result, context);
     }
     await markRun(runId, 'succeeded', history);
     logger.info({ runId, steps: history.length }, 'Automation run succeeded');
@@ -123,6 +123,30 @@ export async function runAutomation(runId: string): Promise<void> {
     if (!dead) throw err; // let the queue retry
   }
   void ctx;
+}
+
+/**
+ * Choose the next node. If the graph declares edges, follow the first edge from
+ * the current node whose optional `when` condition evaluates truthy (this is how
+ * branches fork). Otherwise fall back to the node's first `next`.
+ */
+function nextNode(
+  graph: AutomationGraph,
+  nodeMap: Map<string, AutomationNode>,
+  current: AutomationNode,
+  result: unknown,
+  context: Record<string, unknown>,
+): AutomationNode | undefined {
+  const edges = (graph.edges ?? []).filter((e) => e.from === current.id);
+  if (edges.length) {
+    const flat = { ...flatten(context), result: result as never };
+    for (const edge of edges) {
+      if (!edge.when || !!evaluateFormula(edge.when, flat)) return nodeMap.get(edge.to);
+    }
+    return undefined;
+  }
+  const nextId = (current.next ?? [])[0];
+  return nextId ? nodeMap.get(nextId) : undefined;
 }
 
 async function executeNode(node: AutomationNode, context: Record<string, unknown>): Promise<unknown> {
@@ -147,6 +171,14 @@ async function executeNode(node: AutomationNode, context: Record<string, unknown
           (node.config.patch as Record<string, unknown>) ?? {},
         );
       }
+      if (action === 'notify') {
+        return createNotification({
+          userId: String(node.config.userId ?? ''),
+          title: interpolateStr(String(node.config.title ?? 'Notification'), context),
+          body: interpolateStr(String(node.config.body ?? ''), context),
+          channel: String(node.config.channel ?? 'in_app'),
+        });
+      }
       return { skipped: action };
     }
     case 'integration':
@@ -167,6 +199,33 @@ function flatten(context: Record<string, unknown>): Record<string, string | numb
   const record = context.record as Record<string, unknown> | undefined;
   if (record) for (const [k, v] of Object.entries(record)) out[k] = v as never;
   return out;
+}
+
+function interpolateStr(template: string, context: Record<string, unknown>): string {
+  const flat = flatten(context);
+  return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_, key: string) => String(flat[key] ?? ''));
+}
+
+async function createNotification(input: {
+  userId: string;
+  title: string;
+  body: string;
+  channel: string;
+}): Promise<{ notificationId: string }> {
+  const ctx = getContext();
+  const id = newId('notification');
+  await withTenant(async (tx) => {
+    await tx.insert(schema.notifications).values({
+      id,
+      tenantId: ctx.tenantId,
+      applicationId: ctx.applicationId,
+      userId: input.userId,
+      channel: input.channel,
+      title: input.title,
+      body: input.body,
+    });
+  });
+  return { notificationId: id };
 }
 
 async function markRun(

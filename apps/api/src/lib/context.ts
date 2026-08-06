@@ -1,6 +1,6 @@
 import type { FastifyReply, FastifyRequest, RouteHandlerMethod } from 'fastify';
 import { Unauthenticated, newCorrelationId } from '@crms/kernel';
-import { authService } from '@crms/auth';
+import { authService, isApiKey, resolveApiKeyContext } from '@crms/auth';
 import { runWithBuiltContext, type TenantContext } from '@crms/tenant-context';
 import { APPLICATION_HEADER, ENVIRONMENT_HEADER, CORRELATION_HEADER, type Environment } from '@crms/config';
 
@@ -21,7 +21,11 @@ export function authed(handler: (req: FastifyRequest, reply: FastifyReply) => Pr
     const token = bearer(req);
     if (!token) throw Unauthenticated();
     const correlationId = (req.headers[CORRELATION_HEADER] as string) ?? newCorrelationId();
-    let ctx: TenantContext = await authService.resolveContext(token, { origin: 'api', correlationId });
+    // Two credential types share the Bearer header: opaque API keys (crms_...)
+    // resolve to a service-account context; everything else is a user session.
+    let ctx: TenantContext = isApiKey(token)
+      ? await resolveApiKeyContext(token, { ip: req.ip, correlationId })
+      : await authService.resolveContext(token, { origin: 'api', correlationId });
 
     const appId = req.headers[APPLICATION_HEADER] as string | undefined;
     const env = req.headers[ENVIRONMENT_HEADER] as Environment | undefined;

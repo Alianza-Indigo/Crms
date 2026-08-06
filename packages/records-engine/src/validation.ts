@@ -27,8 +27,13 @@ export async function validateValues(
   const projections: Projection[] = [];
   const errors: string[] = [];
 
+  // These field types are computed by the engine, not supplied by the user, so
+  // they are never validated/coerced here (they are recomputed on write).
+  const DERIVED_TYPES = new Set(['formula', 'computed', 'rollup', 'count', 'autonumber', 'auto_id']);
+
   for (const field of fields) {
     if (field.deletedAt) continue;
+    if (DERIVED_TYPES.has(field.type)) continue;
     const raw = data[field.key];
     const present = raw !== undefined && raw !== null && raw !== '';
 

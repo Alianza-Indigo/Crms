@@ -6,6 +6,8 @@ import { runWithBuiltContext, buildContext } from '@crms/tenant-context';
 import { onEvent, runAutomation } from '@crms/automation-engine';
 import { drainAutomationRuns } from './automation-runner.js';
 import { archiveAuditLogs } from './audit-archiver.js';
+import { enqueueWebhookDeliveries, drainWebhookDeliveries } from './webhooks.js';
+import { refreshExpiringCredentials } from './credential-refresher.js';
 
 const logger = createLogger('worker');
 
@@ -36,6 +38,9 @@ async function handleEvent(event: DomainEvent): Promise<void> {
     const runIds = await onEvent(event);
     if (runIds.length) logger.info({ event: event.type, runs: runIds.length }, 'Automations triggered');
   });
+  // Fan out to subscribed webhooks (delivered by the webhook loop, off-txn).
+  const webhooks = await enqueueWebhookDeliveries(event);
+  if (webhooks) logger.info({ event: event.type, webhooks }, 'Webhook deliveries queued');
 }
 
 async function loop(name: string, fn: () => Promise<number>, intervalMs: number): Promise<void> {
@@ -60,6 +65,8 @@ async function main(): Promise<void> {
   const loops = [
     loop('outbox', () => dispatchBatch(handleEvent, 50), 1000),
     loop('automations', () => drainAutomationRuns(runAutomation, 20), 1000),
+    loop('webhooks', () => drainWebhookDeliveries(25), 1000),
+    loop('credential-refresh', () => refreshExpiringCredentials(), 60_000),
     loop('audit-archive', () => archiveAuditLogs(), 60_000),
   ];
 
