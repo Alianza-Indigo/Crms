@@ -1,4 +1,4 @@
-import { and, eq, inArray, schema, withElevated } from '@crms/database';
+import { and, eq, inArray, isNotNull, lte, schema, withElevated } from '@crms/database';
 import { createLogger } from '@crms/kernel';
 import { buildContext, runWithBuiltContext } from '@crms/tenant-context';
 
@@ -13,6 +13,20 @@ export async function drainAutomationRuns(
   run: (runId: string) => Promise<void>,
   batchSize: number,
 ): Promise<number> {
+  // First, wake timed 'waiting' runs (wait nodes) whose resume time has passed.
+  await withElevated(async (tx) => {
+    await tx
+      .update(schema.automationRuns)
+      .set({ status: 'queued' })
+      .where(
+        and(
+          eq(schema.automationRuns.status, 'waiting'),
+          isNotNull(schema.automationRuns.resumeAt),
+          lte(schema.automationRuns.resumeAt, new Date()),
+        ),
+      );
+  });
+
   const claimed = await withElevated(async (tx) => {
     const due = await tx
       .select()

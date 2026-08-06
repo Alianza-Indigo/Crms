@@ -4,6 +4,7 @@ import { getContext } from '@crms/tenant-context';
 import type { DomainEvent } from '@crms/events';
 import { recordsEngine } from '@crms/records-engine';
 import { executeConnector } from '@crms/integration-engine';
+import { chat } from '@crms/ai-engine';
 import { evaluateFormula } from '@crms/sandbox-engine';
 
 const logger = createLogger('automation-engine');
@@ -94,19 +95,53 @@ export async function runAutomation(runId: string): Promise<void> {
     return;
   }
 
-  await markRun(runId, 'running', []);
   const graph = def.graph as AutomationGraph;
-  const context: Record<string, unknown> = {
+  const nodeMap = new Map(graph.nodes.map((n) => [n.id, n]));
+
+  // Resume from saved state (waits/approvals persist a cursor into run.context).
+  const saved = (run.context as RunState) ?? {};
+  const context: Record<string, unknown> = saved.vars ?? {
     event: run.triggerEvent,
     record: (run.triggerEvent as DomainEvent).payload?.data ?? {},
   };
-  const history: Array<{ node: string; result: unknown }> = [];
+  const approvals: Record<string, string> = saved.approvals ?? {};
+  const waited: Record<string, boolean> = saved.waited ?? {};
+  const history: Array<{ node: string; result: unknown }> = (run.stepHistory as never) ?? [];
+
+  await markRun(runId, 'running', history);
+  let current = saved.cursor ? nodeMap.get(saved.cursor) : graph.start ? nodeMap.get(graph.start) : graph.nodes[0];
+  let guard = 0;
 
   try {
-    const nodeMap = new Map(graph.nodes.map((n) => [n.id, n]));
-    let current = graph.start ? nodeMap.get(graph.start) : graph.nodes[0];
-    let guard = 0;
-    while (current && guard++ < 100) {
+    while (current && guard++ < 200) {
+      // --- Wait node: pause until resumeAt, then resume past it (PRD §16.1). ---
+      if (current.type === 'wait') {
+        if (!waited[current.id]) {
+          const seconds = Number(current.config.durationSeconds ?? current.config.seconds ?? 0);
+          waited[current.id] = true;
+          await pauseRun(runId, { vars: context, approvals, waited, cursor: current.id }, history, new Date(Date.now() + seconds * 1000));
+          logger.info({ runId, node: current.id, seconds }, 'Automation waiting');
+          return;
+        }
+        current = nextNode(graph, nodeMap, current, true, context);
+        continue;
+      }
+
+      // --- Approval node: pause until a human decision, then branch on it. ---
+      if (current.type === 'approval') {
+        const decision = approvals[current.id];
+        if (!decision) {
+          await requestApproval(current, context);
+          await pauseRun(runId, { vars: context, approvals, waited, cursor: current.id }, history, null);
+          logger.info({ runId, node: current.id }, 'Automation awaiting approval');
+          return;
+        }
+        history.push({ node: current.id, result: decision });
+        context.result = decision;
+        current = nextNode(graph, nodeMap, current, decision, context);
+        continue;
+      }
+
       const result = await executeNode(current, context);
       history.push({ node: current.id, result });
       context[`step_${current.id}`] = result;
@@ -123,6 +158,52 @@ export async function runAutomation(runId: string): Promise<void> {
     if (!dead) throw err; // let the queue retry
   }
   void ctx;
+}
+
+interface RunState {
+  vars?: Record<string, unknown>;
+  approvals?: Record<string, string>;
+  waited?: Record<string, boolean>;
+  cursor?: string;
+}
+
+/** Persist a paused run's full state so it can resume exactly where it stopped. */
+async function pauseRun(runId: string, state: RunState, history: unknown[], resumeAt: Date | null): Promise<void> {
+  await withTenant(async (tx) => {
+    await tx
+      .update(schema.automationRuns)
+      .set({ status: 'waiting', context: state as never, stepHistory: history, resumeAt })
+      .where(eq(schema.automationRuns.id, runId));
+  });
+}
+
+/**
+ * Resolve a pending approval (PRD §16). Records the decision against the paused
+ * node and re-queues the run so the executor resumes and branches on it.
+ */
+export async function resolveApproval(runId: string, decision: 'approved' | 'rejected'): Promise<void> {
+  await withTenant(async (tx) => {
+    const [run] = await tx.select().from(schema.automationRuns).where(eq(schema.automationRuns.id, runId));
+    if (!run) throw NotFound('AutomationRun', runId);
+    const state = (run.context as RunState) ?? {};
+    if (!state.cursor) throw NotFound('pending approval for run', runId);
+    const approvals = { ...(state.approvals ?? {}), [state.cursor]: decision };
+    await tx
+      .update(schema.automationRuns)
+      .set({ context: { ...state, approvals } as never, status: 'queued', resumeAt: null })
+      .where(eq(schema.automationRuns.id, runId));
+  });
+}
+
+async function requestApproval(node: AutomationNode, context: Record<string, unknown>): Promise<void> {
+  const approverId = String(node.config.approverUserId ?? '');
+  if (!approverId) return;
+  await createNotification({
+    userId: approverId,
+    title: interpolateStr(String(node.config.title ?? 'Approval required'), context),
+    body: interpolateStr(String(node.config.body ?? 'An automation is awaiting your approval.'), context),
+    channel: 'in_app',
+  });
 }
 
 /**
@@ -178,6 +259,20 @@ async function executeNode(node: AutomationNode, context: Record<string, unknown
           body: interpolateStr(String(node.config.body ?? ''), context),
           channel: String(node.config.channel ?? 'in_app'),
         });
+      }
+      if (action === 'run_ai') {
+        // Runs the tenant's BYO AI on an interpolated prompt (PRD §16.3, §23).
+        const result = await chat({
+          provider: String(node.config.provider ?? 'openai'),
+          credentialKey: node.config.credentialKey as string | undefined,
+          credentialId: node.config.credentialId as string | undefined,
+          messages: [
+            ...(node.config.system ? [{ role: 'system' as const, content: String(node.config.system) }] : []),
+            { role: 'user' as const, content: interpolateStr(String(node.config.prompt ?? ''), context) },
+          ],
+          maxTokens: Number(node.config.maxTokens ?? 1024),
+        });
+        return { text: result.text };
       }
       return { skipped: action };
     }

@@ -8,6 +8,7 @@
   "exports": { ".": "./src/index.ts" },
   "scripts": { "typecheck": "tsc --noEmit", "test": "vitest run", "clean": "rm -rf dist .turbo" },
   "dependencies": {
+    "@crms/ai-engine": "workspace:*",
     "@crms/database": "workspace:*",
     "@crms/events": "workspace:*",
     "@crms/integration-engine": "workspace:*",

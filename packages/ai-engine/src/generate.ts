@@ -1,4 +1,6 @@
-import { ValidationError, createLogger } from '@crms/kernel';
+import { schema, withTenant } from '@crms/database';
+import { newId, ValidationError, createLogger } from '@crms/kernel';
+import { getContext } from '@crms/tenant-context';
 import { chat, type ChatMessage } from './providers.js';
 import { aiPlanService, AiPlanInputSchema, type AiPlanInput } from './plan.js';
 
@@ -43,7 +45,8 @@ export async function generatePlanFromPrompt(input: {
   provider: string;
   credentialKey?: string;
   credentialId?: string;
-}): Promise<{ planId: string; plan: AiPlanInput }> {
+}): Promise<{ planId: string; plan: AiPlanInput; conversationId: string }> {
+  const ctx = getContext();
   const messages: ChatMessage[] = [
     { role: 'system', content: SYSTEM_PROMPT },
     { role: 'user', content: input.prompt },
@@ -62,12 +65,38 @@ export async function generatePlanFromPrompt(input: {
     const o = op as { op: string; args: Record<string, unknown> };
     return { op: o.op as never, args: o.args, destructive: false };
   });
+
+  // Persist the conversation + session for traceability (PRD §9.3). The session
+  // records the assistant turn + provider usage (tokens/counts), not prompts as
+  // metering — this is the tenant's own conversation history.
+  const conversationId = newId('aiConversation');
+  await withTenant(async (tx) => {
+    await tx.insert(schema.aiConversations).values({
+      id: conversationId,
+      tenantId: ctx.tenantId,
+      applicationId: ctx.applicationId,
+      environment: ctx.environment,
+      title: input.prompt.slice(0, 80),
+      userId: ctx.userId,
+    });
+    await tx.insert(schema.aiSessions).values({
+      id: newId('aiSession'),
+      tenantId: ctx.tenantId,
+      conversationId,
+      provider: input.provider,
+      credentialId: input.credentialId,
+      messages: [...messages, { role: 'assistant', content: result.text }] as never,
+      usage: (result.usage ?? {}) as never,
+    });
+  });
+
   const planInput = AiPlanInputSchema.parse({
     summary: raw.summary ?? 'AI-generated application',
     operations,
+    conversationId,
     requiredCredentials: [],
   });
   const planId = await aiPlanService.create(planInput);
-  logger.info({ planId, operations: operations.length }, 'AI generated an application plan');
-  return { planId, plan: planInput };
+  logger.info({ planId, conversationId, operations: operations.length }, 'AI generated an application plan');
+  return { planId, plan: planInput, conversationId };
 }

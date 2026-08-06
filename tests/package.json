@@ -9,9 +9,11 @@
   },
   "dependencies": {
     "@crms/audit": "workspace:*",
+    "@crms/automation-engine": "workspace:*",
     "@crms/config": "workspace:*",
     "@crms/credential-engine": "workspace:*",
     "@crms/database": "workspace:*",
+    "@crms/events": "workspace:*",
     "@crms/kernel": "workspace:*",
     "@crms/permissions": "workspace:*",
     "@crms/records-engine": "workspace:*",

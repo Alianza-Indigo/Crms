@@ -176,8 +176,16 @@ Docker + environment variables (`docker compose` here mirrors that).
   O(1) on the shared hot path.
 - **AI application generation**: natural-language → validated AIPlan → review →
   approve → execute (BYO provider).
-- Automations: edge/branch traversal + notify action; official connector
-  templates (Slack/Stripe/WhatsApp/Gmail/Mercado Pago/Telegram).
+- Automations: **resumable executor** with real waits (scheduled resume),
+  approvals (pause → human decision → branch), edge/branch traversal, and
+  notify/record/integration/AI actions; official connector templates
+  (Slack/Stripe/WhatsApp/Gmail/Mercado Pago/Telegram).
+- **Field-level permissions**: restricted fields are masked on read and rejected
+  on write for subjects lacking the role (owners bypass) — covered by tests.
+- **Mobile delta sync** (`/modules/:id/sync`): changes + tombstones since a
+  cursor, ordered by `updated_at`, with field masking — covered by tests.
+- **AI conversation persistence**: generation records AIConversation + AISession
+  (messages + provider usage) linked to the resulting AIPlan.
 
 ## Scope note
 

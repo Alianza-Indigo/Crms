@@ -28,6 +28,16 @@ export async function recordRoutes(app: FastifyInstance): Promise<void> {
     }),
   );
 
+  // Mobile/offline delta sync (PRD §27.1): changes + tombstones since a cursor.
+  app.get(
+    '/modules/:moduleId/sync',
+    authed(async (req) => {
+      const { moduleId } = req.params as { moduleId: string };
+      const q = req.query as { since?: string; limit?: string };
+      return recordsEngine.sync(moduleId, q.since, q.limit ? Number(q.limit) : undefined);
+    }),
+  );
+
   app.get(
     '/modules/:moduleId/records/:recordId',
     authed(async (req) => {

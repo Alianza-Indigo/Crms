@@ -15,6 +15,7 @@
     "@crms/ai-engine": "workspace:*",
     "@crms/audit": "workspace:*",
     "@crms/auth": "workspace:*",
+    "@crms/automation-engine": "workspace:*",
     "@crms/billing": "workspace:*",
     "@crms/config": "workspace:*",
     "@crms/credential-engine": "workspace:*",

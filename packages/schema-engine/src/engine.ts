@@ -113,6 +113,7 @@ export class SchemaEngine {
         defaultValue: data.defaultValue as never,
         config: data.config,
         validations: data.validations,
+        permissions: data.permissions,
         helpText: data.helpText,
         createdBy: getContext().userId,
       });

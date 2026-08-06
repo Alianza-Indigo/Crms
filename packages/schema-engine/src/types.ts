@@ -29,6 +29,8 @@ export const FieldInputSchema = z.object({
   defaultValue: z.unknown().optional(),
   config: z.record(z.unknown()).default({}),
   validations: z.array(z.record(z.unknown())).default([]),
+  /** Field-level permissions: { readRoles?: string[]; writeRoles?: string[] } (PRD §18). */
+  permissions: z.record(z.unknown()).default({}),
   helpText: z.string().optional(),
 });
 export type FieldInput = z.infer<typeof FieldInputSchema>;

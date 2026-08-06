@@ -1,5 +1,5 @@
-import { and, eq, schema, withTenant, type DbExecutor } from '@crms/database';
-import { newId, NotFound, ValidationError, DestructiveUnconfirmed, createLogger } from '@crms/kernel';
+import { and, eq, gt, asc, schema, withTenant, type DbExecutor } from '@crms/database';
+import { newId, NotFound, ValidationError, DestructiveUnconfirmed, Forbidden, createLogger } from '@crms/kernel';
 import { getContext } from '@crms/tenant-context';
 import { assert, check } from '@crms/permissions';
 import { buildEvent, EVENT_TYPES } from '@crms/events';
@@ -45,12 +45,58 @@ export class RecordsEngine {
       branchId: row.branchId,
     });
     void scope;
-    return row;
+    const fields = await this.loadFields(moduleId);
+    return this.maskRecord(row, fields);
   }
 
   async list(spec: QuerySpec) {
     await assert('view', { type: 'record', selector: spec.moduleId });
-    return query(spec);
+    const page = await query(spec);
+    const fields = await this.loadFields(spec.moduleId);
+    page.items = page.items.map((r) => this.maskRecord(r, fields));
+    return page;
+  }
+
+  /**
+   * Field-level permissions (PRD §18). Compute the set of field keys the current
+   * subject may NOT read / write. Owners and platform admins bypass. A field is
+   * restricted when it declares readRoles/writeRoles and the subject holds none.
+   */
+  private fieldMasks(fields: Array<typeof schema.fieldDefinitions.$inferSelect>): { noRead: Set<string>; noWrite: Set<string> } {
+    const ctx = getContext();
+    const noRead = new Set<string>();
+    const noWrite = new Set<string>();
+    if (ctx.isPlatformAdmin || ctx.roleIds.includes('__owner__')) return { noRead, noWrite };
+    for (const f of fields) {
+      const p = (f.permissions as { readRoles?: string[]; writeRoles?: string[] }) ?? {};
+      if (p.readRoles?.length && !p.readRoles.some((r) => ctx.roleIds.includes(r))) noRead.add(f.key);
+      if (p.writeRoles?.length && !p.writeRoles.some((r) => ctx.roleIds.includes(r))) noWrite.add(f.key);
+    }
+    return { noRead, noWrite };
+  }
+
+  /** Strip fields the subject may not read from a record's data snapshot. */
+  private maskRecord(
+    row: typeof schema.records.$inferSelect,
+    fields: Array<typeof schema.fieldDefinitions.$inferSelect>,
+  ): typeof schema.records.$inferSelect {
+    const { noRead } = this.fieldMasks(fields);
+    if (noRead.size === 0) return row;
+    const data = { ...(row.data as Record<string, unknown>) };
+    for (const key of noRead) delete data[key];
+    return { ...row, data };
+  }
+
+  /** Reject writes to fields the subject may not write (PRD §18). */
+  private assertFieldWrites(
+    fields: Array<typeof schema.fieldDefinitions.$inferSelect>,
+    keys: string[],
+  ): void {
+    const { noWrite } = this.fieldMasks(fields);
+    const denied = keys.filter((k) => noWrite.has(k));
+    if (denied.length) {
+      throw Forbidden(`You cannot modify field(s): ${denied.join(', ')}`, { fields: denied });
+    }
   }
 
   async create(input: CreateRecordInput): Promise<typeof schema.records.$inferSelect> {
@@ -59,6 +105,7 @@ export class RecordsEngine {
     await assert('create', { type: 'record', selector: input.moduleId });
 
     const fields = await this.loadFields(input.moduleId);
+    this.assertFieldWrites(fields, Object.keys(input.data));
     const { normalized, projections } = await validateValues(fields, input.data, { mode: 'create' });
 
     const recordId = newId('record');
@@ -112,6 +159,7 @@ export class RecordsEngine {
       branchId: current.branchId,
     });
     const fields = await this.loadFields(moduleId);
+    this.assertFieldWrites(fields, Object.keys(patch));
     const merged = { ...(current.data as Record<string, unknown>), ...patch };
     const { normalized, projections } = await validateValues(fields, merged, { mode: 'update' });
 
@@ -169,6 +217,52 @@ export class RecordsEngine {
       await tx.update(schema.records).set({ deletedAt: new Date() }).where(eq(schema.records.id, recordId));
       await tx.update(schema.recordValues).set({ deletedAt: new Date() }).where(eq(schema.recordValues.recordId, recordId));
       await writeEvent(tx, buildEvent({ type: EVENT_TYPES.recordDeleted, moduleId, recordId }));
+    });
+  }
+
+  /**
+   * Delta sync for mobile/offline clients (PRD §27.1). Returns records changed
+   * since a cursor, including tombstones for deletions, ordered by updated_at so
+   * the client can resume with `nextSince`. Field masking is applied.
+   */
+  async sync(
+    moduleId: string,
+    sinceIso: string | undefined,
+    limit = 100,
+  ): Promise<{ changed: Array<typeof schema.records.$inferSelect>; deleted: Array<{ id: string; deletedAt: string }>; nextSince: string; hasMore: boolean }> {
+    const scope = requireScope();
+    await assert('view', { type: 'record', selector: moduleId });
+    const since = sinceIso ? new Date(sinceIso) : new Date(0);
+    const capped = Math.min(Math.max(limit, 1), 500);
+    return withTenant(async (tx) => {
+      const rows = await tx
+        .select()
+        .from(schema.records)
+        .where(
+          and(
+            eq(schema.records.tenantId, scope.tenantId),
+            eq(schema.records.applicationId, scope.applicationId),
+            eq(schema.records.environment, scope.environment),
+            eq(schema.records.moduleId, moduleId),
+            gt(schema.records.updatedAt, since),
+          ),
+        )
+        .orderBy(asc(schema.records.updatedAt))
+        .limit(capped + 1);
+      const hasMore = rows.length > capped;
+      const items = hasMore ? rows.slice(0, capped) : rows;
+      const fields = await this.loadFields(moduleId);
+      const changed = items.filter((r) => !r.deletedAt).map((r) => this.maskRecord(r, fields));
+      const deleted = items
+        .filter((r) => r.deletedAt)
+        .map((r) => ({ id: r.id, deletedAt: r.deletedAt!.toISOString() }));
+      const last = items[items.length - 1];
+      return {
+        changed,
+        deleted,
+        nextSince: last ? last.updatedAt.toISOString() : (sinceIso ?? new Date(0).toISOString()),
+        hasMore,
+      };
     });
   }
 

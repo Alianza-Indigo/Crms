@@ -35,6 +35,9 @@ importers:
       '@crms/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@crms/automation-engine':
+        specifier: workspace:*
+        version: link:../../packages/automation-engine
       '@crms/billing':
         specifier: workspace:*
         version: link:../../packages/billing
@@ -245,6 +248,9 @@ importers:
 
   packages/automation-engine:
     dependencies:
+      '@crms/ai-engine':
+        specifier: workspace:*
+        version: link:../ai-engine
       '@crms/database':
         specifier: workspace:*
         version: link:../database
@@ -750,6 +756,9 @@ importers:
       '@crms/audit':
         specifier: workspace:*
         version: link:../packages/audit
+      '@crms/automation-engine':
+        specifier: workspace:*
+        version: link:../packages/automation-engine
       '@crms/config':
         specifier: workspace:*
         version: link:../packages/config
@@ -759,6 +768,9 @@ importers:
       '@crms/database':
         specifier: workspace:*
         version: link:../packages/database
+      '@crms/events':
+        specifier: workspace:*
+        version: link:../packages/events
       '@crms/kernel':
         specifier: workspace:*
         version: link:../packages/kernel
