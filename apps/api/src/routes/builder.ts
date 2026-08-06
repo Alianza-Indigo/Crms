@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { eq, schema, withTenant } from '@crms/database';
+import { and, eq, schema, withTenant } from '@crms/database';
 import { getContext } from '@crms/tenant-context';
 import { schemaEngine } from '@crms/schema-engine';
 import { diffVersions, cloneApplication, rollbackToVersion } from '@crms/deployment-engine';
@@ -123,7 +123,27 @@ export async function builderRoutes(app: FastifyInstance): Promise<void> {
     }),
   );
 
-  // Config lifecycle (PRD §8.4): diff / clone / rollback.
+  // Config lifecycle (PRD §8.4): versions / diff / clone / rollback.
+  app.get(
+    '/applications/:appId/versions',
+    authed(async (req) => {
+      const { appId } = req.params as { appId: string };
+      const ctx = getContext();
+      return withTenant(async (tx) =>
+        tx
+          .select({
+            id: schema.applicationVersions.id,
+            version: schema.applicationVersions.version,
+            environment: schema.applicationVersions.environment,
+            changelog: schema.applicationVersions.changelog,
+            publishedAt: schema.applicationVersions.publishedAt,
+          })
+          .from(schema.applicationVersions)
+          .where(and(eq(schema.applicationVersions.applicationId, appId), eq(schema.applicationVersions.tenantId, ctx.tenantId))),
+      );
+    }),
+  );
+
   app.get(
     '/applications/:appId/diff',
     authed(async (req) => {

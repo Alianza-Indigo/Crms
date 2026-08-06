@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { getClient } from '../../../lib/crms';
+import { VersionsPanel } from '../../../components/builder/VersionsPanel';
 
 interface Module {
   id: string;
@@ -158,6 +159,8 @@ export default function BuilderPage() {
         ))}
         {modules.length === 0 && !error && <p className="muted">Aún no hay módulos. Créalos aquí o pídeselos a la IA.</p>}
       </section>
+
+      <VersionsPanel />
 
       <style jsx>{`
         .mini {

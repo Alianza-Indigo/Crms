@@ -100,6 +100,13 @@ export class CrmsClient {
   // --- Builder ---
   applications = {
     list: () => this.request<Array<{ id: string; name: string; slug: string }>>('GET', '/applications'),
+    versions: (appId: string) =>
+      this.request<Array<{ id: string; version: string; environment: string; changelog?: string | null; publishedAt: string }>>(
+        'GET',
+        `/applications/${appId}/versions`,
+      ),
+    diff: (appId: string, a: string, b: string) =>
+      this.request<Record<string, unknown>>('GET', `/applications/${appId}/diff?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`),
     clone: (appId: string, name: string) => this.request<{ applicationId: string }>('POST', `/applications/${appId}/clone`, { name }),
     rollback: (appId: string, version: string) => this.request('POST', `/applications/${appId}/rollback`, { version }),
     publish: (version: string, changelog?: string) => this.request<{ versionId: string }>('POST', '/applications/publish', { version, changelog }),
