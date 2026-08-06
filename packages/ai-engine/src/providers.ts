@@ -60,7 +60,7 @@ function defaultModel(provider: string): string {
     case 'google_ai':
     case 'gemini':
     case 'google':
-      return 'gemini-2.0-flash';
+      return 'gemini-3.1-flash-lite';
     case 'openai':
     default:
       return 'gpt-4o';

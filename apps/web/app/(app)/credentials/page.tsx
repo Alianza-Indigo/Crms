@@ -16,7 +16,7 @@ export default function CredentialsPage() {
   const [creds, setCreds] = useState<Cred[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ key: 'OPENAI', name: 'OpenAI', provider: 'openai', authType: 'api_key', apiKey: '' });
+  const [form, setForm] = useState({ key: 'OPENAI', name: 'OpenAI', provider: 'openai', authType: 'api_key', apiKey: '', model: '' });
 
   async function load() {
     try {
@@ -39,6 +39,7 @@ export default function CredentialsPage() {
         provider: form.provider,
         authType: form.authType,
         secret: { apiKey: form.apiKey },
+        ...(form.model.trim() ? { metadata: { defaultModel: form.model.trim() } } : {}),
       });
       setForm({ ...form, apiKey: '' });
       setOpen(false);
@@ -90,6 +91,15 @@ export default function CredentialsPage() {
                 </option>
               ))}
             </select>
+          </label>
+          <label>
+            Modelo (opcional)
+            <input
+              className="input"
+              value={form.model}
+              onChange={(e) => setForm({ ...form, model: e.target.value })}
+              placeholder="p. ej. gemini-3.1-flash-lite"
+            />
           </label>
           <label>
             API key / secreto
