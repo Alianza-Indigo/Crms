@@ -51,6 +51,8 @@ create policy tenant_self on public.tenants
 -- feature_flags may be platform-global (tenant_id IS NULL) and readable by all;
 -- writes to global flags require bypass (platform admin).
 drop policy if exists tenant_isolation on public.feature_flags;
+drop policy if exists feature_flags_read on public.feature_flags;
+drop policy if exists feature_flags_write on public.feature_flags;
 create policy feature_flags_read on public.feature_flags
   for select using (app_bypass_rls() or tenant_id is null or tenant_id = app_current_tenant());
 create policy feature_flags_write on public.feature_flags
