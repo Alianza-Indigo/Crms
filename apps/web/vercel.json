@@ -1,8 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "//": "PRD §35.1 — the Next.js web app deploys to Vercel. Set API_BASE_URL to the Railway API URL. Long jobs never run here; they go to the Railway workers via queues.",
+  "//": "PRD §35.1 — ONLY the Next.js web app deploys to Vercel. On Vercel set the project Root Directory to apps/web; pnpm installs the whole workspace from here and links the @crms/* packages. The API/workers/Postgres/Redis run on Railway — set API_BASE_URL (build-time, becomes NEXT_PUBLIC_API_BASE_URL) to the Railway API URL.",
   "framework": "nextjs",
-  "buildCommand": "cd ../.. && pnpm install --frozen-lockfile && pnpm --filter @crms/web build",
-  "installCommand": "echo 'installed in buildCommand'",
+  "installCommand": "pnpm install --frozen-lockfile",
+  "buildCommand": "next build",
   "outputDirectory": ".next"
 }
