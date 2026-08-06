@@ -36,6 +36,23 @@ export async function builderRoutes(app: FastifyInstance): Promise<void> {
     }),
   );
 
+  app.patch(
+    '/modules/:moduleId',
+    authed(async (req) => {
+      const { moduleId } = req.params as { moduleId: string };
+      return schemaEngine.updateModule(moduleId, req.body as never);
+    }),
+  );
+
+  app.delete(
+    '/modules/:moduleId',
+    authed(async (req) => {
+      const { moduleId } = req.params as { moduleId: string };
+      const confirm = (req.query as { confirm?: string }).confirm === 'true';
+      return schemaEngine.deleteModule(moduleId, { confirm });
+    }),
+  );
+
   app.get(
     '/modules/:moduleId/fields',
     authed(async (req) => {
@@ -53,6 +70,25 @@ export async function builderRoutes(app: FastifyInstance): Promise<void> {
     }),
   );
 
+  app.post(
+    '/modules/:moduleId/fields/reorder',
+    authed(async (req) => {
+      const { moduleId } = req.params as { moduleId: string };
+      const body = z.object({ fieldIds: z.array(z.string()) }).parse(req.body);
+      await schemaEngine.reorderFields(moduleId, body.fieldIds);
+      return { ok: true };
+    }),
+  );
+
+  app.patch(
+    '/fields/:fieldId',
+    authed(async (req) => {
+      const { fieldId } = req.params as { fieldId: string };
+      const confirm = (req.query as { confirm?: string }).confirm === 'true';
+      return schemaEngine.updateField(fieldId, req.body as never, { confirm });
+    }),
+  );
+
   app.delete(
     '/fields/:fieldId',
     authed(async (req) => {
@@ -62,9 +98,20 @@ export async function builderRoutes(app: FastifyInstance): Promise<void> {
     }),
   );
 
+  app.get('/relations', authed(async () => schemaEngine.listRelations()));
+
   app.post(
     '/relations',
     authed(async (req) => schemaEngine.createRelation(req.body as never)),
+  );
+
+  app.delete(
+    '/relations/:relationId',
+    authed(async (req) => {
+      const { relationId } = req.params as { relationId: string };
+      await schemaEngine.deleteRelation(relationId);
+      return { ok: true };
+    }),
   );
 
   app.post(

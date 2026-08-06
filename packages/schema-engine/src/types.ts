@@ -35,6 +35,33 @@ export const FieldInputSchema = z.object({
 });
 export type FieldInput = z.infer<typeof FieldInputSchema>;
 
+/** Editable module attributes (key is immutable — records reference it). */
+export const ModulePatchSchema = z.object({
+  name: z.string().min(1).optional(),
+  namePlural: z.string().optional(),
+  icon: z.string().optional(),
+  color: z.string().optional(),
+  description: z.string().optional(),
+  position: z.number().int().optional(),
+});
+export type ModulePatch = z.infer<typeof ModulePatchSchema>;
+
+/** Editable field attributes (key is immutable). A type change is destructive. */
+export const FieldPatchSchema = z.object({
+  name: z.string().min(1).optional(),
+  type: z.enum(FIELD_TYPES).optional(),
+  required: z.boolean().optional(),
+  unique: z.boolean().optional(),
+  indexed: z.boolean().optional(),
+  defaultValue: z.unknown().optional(),
+  config: z.record(z.unknown()).optional(),
+  validations: z.array(z.record(z.unknown())).optional(),
+  permissions: z.record(z.unknown()).optional(),
+  helpText: z.string().optional(),
+  position: z.number().int().optional(),
+});
+export type FieldPatch = z.infer<typeof FieldPatchSchema>;
+
 export const RelationInputSchema = z.object({
   key: z.string().regex(/^[a-z][a-z0-9_]*$/),
   name: z.string().min(1),

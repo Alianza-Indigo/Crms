@@ -106,11 +106,60 @@ export class CrmsClient {
   };
 
   modules = {
-    list: () => this.request<Array<{ id: string; key: string; name: string }>>('GET', '/modules'),
-    create: (input: { key: string; name: string; namePlural?: string; icon?: string }) =>
+    list: () => this.request<Array<{ id: string; key: string; name: string; icon?: string | null; color?: string | null; description?: string | null }>>('GET', '/modules'),
+    create: (input: { key: string; name: string; namePlural?: string; icon?: string; color?: string; description?: string }) =>
       this.request<{ id: string }>('POST', '/modules', input),
+    update: (moduleId: string, patch: Record<string, unknown>) =>
+      this.request('PATCH', `/modules/${moduleId}`, patch),
+    remove: (moduleId: string, confirm = false) =>
+      this.request('DELETE', `/modules/${moduleId}${confirm ? '?confirm=true' : ''}`),
+    listFields: (moduleId: string) => this.request<Array<Record<string, unknown>>>('GET', `/modules/${moduleId}/fields`),
     createField: (moduleId: string, field: Record<string, unknown>) =>
       this.request('POST', `/modules/${moduleId}/fields`, field),
+    updateField: (fieldId: string, patch: Record<string, unknown>, confirm = false) =>
+      this.request('PATCH', `/fields/${fieldId}${confirm ? '?confirm=true' : ''}`, patch),
+    deleteField: (fieldId: string, confirm = false) =>
+      this.request('DELETE', `/fields/${fieldId}${confirm ? '?confirm=true' : ''}`),
+    reorderFields: (moduleId: string, fieldIds: string[]) =>
+      this.request('POST', `/modules/${moduleId}/fields/reorder`, { fieldIds }),
+  };
+
+  relations = {
+    list: () => this.request<Array<Record<string, unknown>>>('GET', '/relations'),
+    create: (input: Record<string, unknown>) => this.request<{ id: string }>('POST', '/relations', input),
+    remove: (relationId: string) => this.request('DELETE', `/relations/${relationId}`),
+  };
+
+  views = {
+    list: (moduleId: string) => this.request<Array<Record<string, unknown>>>('GET', `/modules/${moduleId}/views`),
+    create: (moduleId: string, input: Record<string, unknown>) =>
+      this.request<{ id: string }>('POST', `/modules/${moduleId}/views`, input),
+    run: (viewId: string, opts: { limit?: number; cursor?: string } = {}) =>
+      this.request<Page<Record<string, unknown>>>(
+        'GET',
+        `/views/${viewId}/run${opts.limit || opts.cursor ? `?${new URLSearchParams({ ...(opts.limit ? { limit: String(opts.limit) } : {}), ...(opts.cursor ? { cursor: opts.cursor } : {}) }).toString()}` : ''}`,
+      ),
+  };
+
+  forms = {
+    list: () => this.request<Array<Record<string, unknown>>>('GET', '/forms'),
+    create: (input: Record<string, unknown>) => this.request<{ id: string }>('POST', '/forms', input),
+    submit: (formId: string, data: Record<string, unknown>) =>
+      this.request<{ recordId: string; mode: string }>('POST', `/forms/${formId}/submit`, { data }),
+  };
+
+  pipelines = {
+    list: (moduleId: string) => this.request<Array<Record<string, unknown>>>('GET', `/modules/${moduleId}/pipelines`),
+    create: (input: Record<string, unknown>) => this.request<{ id: string }>('POST', '/pipelines', input),
+    transition: (pipelineId: string, recordId: string, toStage: string) =>
+      this.request('POST', `/pipelines/${pipelineId}/transition`, { recordId, toStage }),
+  };
+
+  dashboards = {
+    list: () => this.request<Array<Record<string, unknown>>>('GET', '/dashboards'),
+    create: (input: Record<string, unknown>) => this.request<{ id: string }>('POST', '/dashboards', input),
+    runWidget: (widget: Record<string, unknown>) =>
+      this.request<{ metric?: number; series?: Array<{ label: string; value: number }> }>('POST', '/dashboards/widget/run', widget),
   };
 
   records = {

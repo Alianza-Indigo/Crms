@@ -1,4 +1,4 @@
-import { and, eq, count, schema, withTenant } from '@crms/database';
+import { and, eq, count, isNull, schema, withTenant } from '@crms/database';
 import { newId, NotFound, ValidationError, Conflict, DestructiveUnconfirmed, createLogger } from '@crms/kernel';
 import { getContext } from '@crms/tenant-context';
 import { assert } from '@crms/permissions';
@@ -8,9 +8,13 @@ import {
   ModuleInputSchema,
   FieldInputSchema,
   RelationInputSchema,
+  ModulePatchSchema,
+  FieldPatchSchema,
   type ModuleInput,
   type FieldInput,
   type RelationInput,
+  type ModulePatch,
+  type FieldPatch,
   type DestructiveChange,
 } from './types.js';
 
@@ -66,6 +70,76 @@ export class SchemaEngine {
     });
   }
 
+  /** Update a module's editable attributes (key is immutable). */
+  async updateModule(
+    moduleId: string,
+    patch: ModulePatch,
+  ): Promise<typeof schema.moduleDefinitions.$inferSelect> {
+    const data = ModulePatchSchema.parse(patch);
+    await assert('manage_config', { type: 'application' });
+    return withTenant(async (tx) => {
+      const [module] = await tx
+        .select()
+        .from(schema.moduleDefinitions)
+        .where(eq(schema.moduleDefinitions.id, moduleId));
+      if (!module) throw NotFound('Module', moduleId);
+      await tx
+        .update(schema.moduleDefinitions)
+        .set({ ...data, updatedAt: new Date() })
+        .where(eq(schema.moduleDefinitions.id, moduleId));
+      const [row] = await tx.select().from(schema.moduleDefinitions).where(eq(schema.moduleDefinitions.id, moduleId));
+      logger.info({ moduleId }, 'Module updated');
+      return row!;
+    });
+  }
+
+  /** Impact of deleting a module: how many records it would discard. */
+  async analyzeModuleDeletion(moduleId: string): Promise<DestructiveChange[]> {
+    const s = this.scope();
+    return withTenant(async (tx) => {
+      const [module] = await tx
+        .select()
+        .from(schema.moduleDefinitions)
+        .where(eq(schema.moduleDefinitions.id, moduleId));
+      if (!module) throw NotFound('Module', moduleId);
+      const countRows = await tx
+        .select({ value: count() })
+        .from(schema.records)
+        .where(
+          and(
+            eq(schema.records.applicationId, s.applicationId),
+            eq(schema.records.environment, s.environment),
+            eq(schema.records.moduleId, moduleId),
+          ),
+        );
+      const affected = Number(countRows[0]?.value ?? 0);
+      return [
+        {
+          operation: 'delete_module',
+          target: module.key,
+          reason: 'Deleting a module permanently discards all its records and fields',
+          affectedRecords: affected,
+        },
+      ];
+    });
+  }
+
+  /** Delete a module (soft). Destructive: requires confirmation when it holds data. */
+  async deleteModule(moduleId: string, opts: { confirm?: boolean } = {}): Promise<DestructiveChange[]> {
+    const impact = await this.analyzeModuleDeletion(moduleId);
+    const hasData = impact.some((c) => (c.affectedRecords ?? 0) > 0);
+    if (hasData && !opts.confirm) throw DestructiveUnconfirmed('delete_module', { impact });
+    await assert('manage_config', { type: 'application' });
+    await withTenant(async (tx) => {
+      const now = new Date();
+      await tx.update(schema.moduleDefinitions).set({ deletedAt: now }).where(eq(schema.moduleDefinitions.id, moduleId));
+      // Cascade: soft-delete the module's fields too.
+      await tx.update(schema.fieldDefinitions).set({ deletedAt: now }).where(eq(schema.fieldDefinitions.moduleId, moduleId));
+    });
+    logger.info({ moduleId }, 'Module deleted');
+    return impact;
+  }
+
   async listModules(): Promise<Array<typeof schema.moduleDefinitions.$inferSelect>> {
     const s = this.scope();
     return withTenant(async (tx) =>
@@ -76,8 +150,10 @@ export class SchemaEngine {
           and(
             eq(schema.moduleDefinitions.applicationId, s.applicationId),
             eq(schema.moduleDefinitions.environment, s.environment),
+            isNull(schema.moduleDefinitions.deletedAt),
           ),
-        ),
+        )
+        .orderBy(schema.moduleDefinitions.position),
     );
   }
 
@@ -139,8 +215,98 @@ export class SchemaEngine {
 
   async listFields(moduleId: string): Promise<Array<typeof schema.fieldDefinitions.$inferSelect>> {
     return withTenant(async (tx) =>
-      tx.select().from(schema.fieldDefinitions).where(eq(schema.fieldDefinitions.moduleId, moduleId)),
+      tx
+        .select()
+        .from(schema.fieldDefinitions)
+        .where(and(eq(schema.fieldDefinitions.moduleId, moduleId), isNull(schema.fieldDefinitions.deletedAt)))
+        .orderBy(schema.fieldDefinitions.position),
     );
+  }
+
+  /**
+   * Update a field's editable attributes (key is immutable). Changing the type
+   * of a field that already holds values is destructive (PRD §9.4) and requires
+   * confirmation.
+   */
+  async updateField(
+    fieldId: string,
+    patch: FieldPatch,
+    opts: { confirm?: boolean } = {},
+  ): Promise<typeof schema.fieldDefinitions.$inferSelect> {
+    const data = FieldPatchSchema.parse(patch);
+    const s = this.scope();
+    return withTenant(async (tx) => {
+      const [field] = await tx.select().from(schema.fieldDefinitions).where(eq(schema.fieldDefinitions.id, fieldId));
+      if (!field) throw NotFound('Field', fieldId);
+      await assert('manage_config', { type: 'module', selector: field.moduleId });
+
+      const nextType = data.type ?? field.type;
+      const nextConfig = (data.config ?? (field.config as Record<string, unknown>)) as Record<string, unknown>;
+      // Re-validate the resulting (type, config) shape.
+      this.validateFieldConfig({ type: nextType, config: nextConfig } as FieldInput);
+
+      // A type change on a field with stored values can corrupt data.
+      if (data.type && data.type !== field.type) {
+        const countRows = await tx
+          .select({ value: count() })
+          .from(schema.recordValues)
+          .where(
+            and(
+              eq(schema.recordValues.applicationId, s.applicationId),
+              eq(schema.recordValues.environment, s.environment),
+              eq(schema.recordValues.fieldId, fieldId),
+            ),
+          );
+        const affected = Number(countRows[0]?.value ?? 0);
+        if (affected > 0 && !opts.confirm) {
+          throw DestructiveUnconfirmed('change_field_type', {
+            impact: [
+              {
+                operation: 'change_field_type',
+                target: `${field.moduleId}.${field.key}`,
+                reason: `Changing type ${field.type} → ${data.type} may invalidate stored values`,
+                affectedRecords: affected,
+              },
+            ],
+          });
+        }
+      }
+
+      await tx
+        .update(schema.fieldDefinitions)
+        .set({
+          ...(data.name !== undefined ? { name: data.name } : {}),
+          ...(data.type !== undefined ? { type: data.type } : {}),
+          ...(data.required !== undefined ? { required: data.required } : {}),
+          ...(data.unique !== undefined ? { unique: data.unique } : {}),
+          ...(data.indexed !== undefined ? { indexed: data.indexed } : {}),
+          ...(data.defaultValue !== undefined ? { defaultValue: data.defaultValue as never } : {}),
+          ...(data.config !== undefined ? { config: data.config } : {}),
+          ...(data.validations !== undefined ? { validations: data.validations } : {}),
+          ...(data.permissions !== undefined ? { permissions: data.permissions } : {}),
+          ...(data.helpText !== undefined ? { helpText: data.helpText } : {}),
+          ...(data.position !== undefined ? { position: data.position } : {}),
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.fieldDefinitions.id, fieldId));
+      const [row] = await tx.select().from(schema.fieldDefinitions).where(eq(schema.fieldDefinitions.id, fieldId));
+      logger.info({ fieldId }, 'Field updated');
+      return row!;
+    });
+  }
+
+  /** Persist a new field ordering for a module (positions follow the array). */
+  async reorderFields(moduleId: string, orderedFieldIds: string[]): Promise<void> {
+    await assert('manage_config', { type: 'module', selector: moduleId });
+    await withTenant(async (tx) => {
+      for (let i = 0; i < orderedFieldIds.length; i++) {
+        await tx
+          .update(schema.fieldDefinitions)
+          .set({ position: i })
+          .where(and(eq(schema.fieldDefinitions.id, orderedFieldIds[i]!), eq(schema.fieldDefinitions.moduleId, moduleId)));
+      }
+    });
+    logger.info({ moduleId, count: orderedFieldIds.length }, 'Fields reordered');
   }
 
   async createRelation(input: RelationInput): Promise<typeof schema.relationDefinitions.$inferSelect> {
@@ -168,6 +334,33 @@ export class SchemaEngine {
       const [row] = await tx.select().from(schema.relationDefinitions).where(eq(schema.relationDefinitions.id, id));
       return row!;
     });
+  }
+
+  async listRelations(): Promise<Array<typeof schema.relationDefinitions.$inferSelect>> {
+    const s = this.scope();
+    return withTenant(async (tx) =>
+      tx
+        .select()
+        .from(schema.relationDefinitions)
+        .where(
+          and(
+            eq(schema.relationDefinitions.applicationId, s.applicationId),
+            eq(schema.relationDefinitions.environment, s.environment),
+            isNull(schema.relationDefinitions.deletedAt),
+          ),
+        ),
+    );
+  }
+
+  async deleteRelation(relationId: string): Promise<void> {
+    await assert('manage_config', { type: 'application' });
+    await withTenant(async (tx) => {
+      await tx
+        .update(schema.relationDefinitions)
+        .set({ deletedAt: new Date() })
+        .where(eq(schema.relationDefinitions.id, relationId));
+    });
+    logger.info({ relationId }, 'Relation deleted');
   }
 
   /**
