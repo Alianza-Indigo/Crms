@@ -91,8 +91,8 @@ cp .env.example .env
 node -e "console.log('PLATFORM_MASTER_KEY='+require('crypto').randomBytes(32).toString('base64'))" >> .env
 node -e "console.log('JWT_SECRET='+require('crypto').randomBytes(48).toString('base64'))" >> .env
 
-# infra
-docker compose up -d postgres redis
+# infra (local dev services)
+docker compose -f deploy/docker-compose.dev.yml up -d postgres redis
 
 # schema + RLS
 pnpm db:generate     # (already committed; regenerate after schema changes)
