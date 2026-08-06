@@ -61,10 +61,15 @@ export async function runMigrations(): Promise<void> {
  * CRMS_APP_ROLE + CRMS_APP_ROLE_PASSWORD — the recommended one-command deploy.
  */
 async function ensureAppRole(): Promise<void> {
-  const role = process.env.CRMS_APP_ROLE;
+  // Default the role name to crms_app: as soon as a password is provided the app
+  // role is bootstrapped, so a deploy can't silently skip it and leave the app
+  // unable to log in (db "down"). Only the password must be supplied.
+  const role = process.env.CRMS_APP_ROLE ?? 'crms_app';
   const password = process.env.CRMS_APP_ROLE_PASSWORD;
-  if (!role || !password) {
-    logger.info('CRMS_APP_ROLE not set; skipping app-role bootstrap (app must connect as a NOBYPASSRLS role)');
+  if (!password) {
+    logger.info(
+      'CRMS_APP_ROLE_PASSWORD not set; skipping app-role bootstrap (app must connect as a pre-existing NOBYPASSRLS role)',
+    );
     return;
   }
   if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(role)) throw new Error('CRMS_APP_ROLE must be a valid identifier');
