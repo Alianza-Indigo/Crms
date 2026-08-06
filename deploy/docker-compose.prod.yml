@@ -1,0 +1,131 @@
+# ============================================================================
+# Full production-shaped stack — the SAME topology Railway runs, in one file.
+# Everything (web + api + worker + Postgres + Redis) runs here; no Vercel needed.
+#
+#   cd deploy && cp .env.prod.example .env && docker compose -f docker-compose.prod.yml up --build
+#
+# `migrate` runs once (schema + RLS + creates the NOBYPASSRLS app role), then
+# api/worker/web start. api/worker connect as the app role (RLS enforced);
+# migrate + tenant-migration DDL use the admin role.
+# ============================================================================
+name: crms
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: crms
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-crms}
+      POSTGRES_DB: crms
+    volumes:
+      - pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crms -d crms"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # One-shot: migrations + RLS + create the least-privilege app role.
+  migrate:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        APP: migrate
+    environment:
+      DATABASE_URL: postgres://crms:${POSTGRES_PASSWORD:-crms}@postgres:5432/crms
+      REDIS_URL: redis://redis:6379
+      PLATFORM_MASTER_KEY: ${PLATFORM_MASTER_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      CRMS_APP_ROLE: crms_app
+      CRMS_APP_ROLE_PASSWORD: ${APP_DB_PASSWORD:-crms_app}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        APP: api
+    environment:
+      DATABASE_URL: postgres://crms_app:${APP_DB_PASSWORD:-crms_app}@postgres:5432/crms
+      CRMS_ADMIN_DATABASE_URL: postgres://crms:${POSTGRES_PASSWORD:-crms}@postgres:5432/crms
+      REDIS_URL: redis://redis:6379
+      PLATFORM_MASTER_KEY: ${PLATFORM_MASTER_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3000}
+      API_BASE_URL: ${API_BASE_URL:-http://localhost:4000}
+      PORT: 4000
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      OIDC_ISSUER: ${OIDC_ISSUER:-}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_PRICES: ${STRIPE_PRICES:-{}}
+      SANDBOX_RUNNER: ${SANDBOX_RUNNER:-off}
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_BUCKET: ${S3_BUCKET:-crms-platform}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+    ports:
+      - "4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  worker:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        APP: worker
+    environment:
+      DATABASE_URL: postgres://crms_app:${APP_DB_PASSWORD:-crms_app}@postgres:5432/crms
+      CRMS_ADMIN_DATABASE_URL: postgres://crms:${POSTGRES_PASSWORD:-crms}@postgres:5432/crms
+      REDIS_URL: redis://redis:6379
+      PLATFORM_MASTER_KEY: ${PLATFORM_MASTER_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_BUCKET: ${S3_BUCKET:-crms-platform}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  web:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        APP: web
+        API_BASE_URL: ${API_BASE_URL:-http://localhost:4000}
+    environment:
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  pg:
+  redis:

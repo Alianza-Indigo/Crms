@@ -71,8 +71,10 @@ export async function buildServer() {
 async function main(): Promise<void> {
   const env = loadEnv();
   const app = await buildServer();
-  await app.listen({ port: env.API_PORT, host: '0.0.0.0' });
-  logger.info({ port: env.API_PORT }, 'CRMS API listening');
+  // Honor the platform-injected PORT (Railway/Heroku/etc), else the configured one.
+  const port = process.env.PORT ? Number(process.env.PORT) : env.API_PORT;
+  await app.listen({ port, host: '0.0.0.0' });
+  logger.info({ port }, 'CRMS API listening');
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

@@ -148,9 +148,16 @@ leak.
 
 ## Deployment
 
-Frontend + short web requests on **Vercel**; the persistent API, workers, queues,
-Postgres and Redis on **Railway** (PRD §35). The whole platform is portable via
-Docker + environment variables (`docker compose` here mirrors that).
+**Everything runs on Railway** — web + api + worker + Postgres + Redis — from one
+multi-purpose `Dockerfile` (`--build-arg APP=api|worker|web|migrate`). Vercel is
+optional (frontend-only). One command provisions the DB: the `migrate` service
+applies schema + RLS **and creates the least-privilege `crms_app` role** so RLS
+is enforced.
+
+- Step-by-step Railway guide: [`deploy/DEPLOY.md`](deploy/DEPLOY.md)
+- Full stack locally (same topology): `cd deploy && cp .env.prod.example .env && docker compose -f docker-compose.prod.yml up --build`
+
+The whole platform is portable via Docker + environment variables (PRD §35.4).
 
 ## Authentication
 
