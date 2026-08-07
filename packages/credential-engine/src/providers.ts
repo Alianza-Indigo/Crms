@@ -117,9 +117,17 @@ register(
   })),
 );
 
+// Google Gemini (google_ai): probe its OpenAI-compatible models endpoint with
+// the Bearer key so a wrong key is caught (401) at credential-save time.
+register(
+  new GenericValidator('google_ai', (i) => ({
+    url: 'https://generativelanguage.googleapis.com/v1beta/openai/models',
+    headers: { authorization: `Bearer ${i.secret.apiKey as string}` },
+  })),
+);
+
 // Providers validated by shape only (probe requires OAuth dance / signed reqs).
 for (const p of [
-  'google_ai',
   'azure_openai',
   'gmail',
   'outlook',

@@ -44,13 +44,15 @@ class StripeProvider implements PlatformPaymentProvider {
     return c.id as string;
   }
 
-  async createSubscription(input: { customerId: string; plan: string; seats: number }): Promise<{ subscriptionRef: string; currentPeriodEnd: Date }> {
+  async createSubscription(input: { customerId: string; plan: string; seats: number; coupon?: string; automaticTax?: boolean }): Promise<{ subscriptionRef: string; currentPeriodEnd: Date }> {
     const price = this.prices[input.plan];
     if (!price) throw new Error(`No Stripe price configured for plan '${input.plan}' (set STRIPE_PRICES)`);
     const sub = await this.call('/v1/subscriptions', {
       customer: input.customerId,
       'items[0][price]': price,
       'items[0][quantity]': String(input.seats),
+      ...(input.coupon ? { 'discounts[0][coupon]': input.coupon } : {}),
+      ...(input.automaticTax ? { 'automatic_tax[enabled]': 'true' } : {}),
     });
     return {
       subscriptionRef: sub.id as string,

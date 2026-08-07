@@ -17,7 +17,7 @@ const logger = createLogger('billing');
 
 export interface PlatformPaymentProvider {
   createCustomer(input: { tenantId: string; email?: string }): Promise<string>;
-  createSubscription(input: { customerId: string; plan: string; seats: number }): Promise<{ subscriptionRef: string; currentPeriodEnd: Date }>;
+  createSubscription(input: { customerId: string; plan: string; seats: number; coupon?: string; automaticTax?: boolean }): Promise<{ subscriptionRef: string; currentPeriodEnd: Date }>;
   changePlan(input: { subscriptionRef: string; plan: string; seats: number }): Promise<void>;
   cancel(subscriptionRef: string): Promise<void>;
 }
@@ -32,6 +32,8 @@ export async function createSubscription(input: {
   plan: string;
   seats?: number;
   trialDays?: number;
+  coupon?: string;
+  automaticTax?: boolean;
 }): Promise<string> {
   const id = newId('subscription');
   const trialEndsAt = input.trialDays ? new Date(Date.now() + input.trialDays * 86400_000) : null;
@@ -39,7 +41,7 @@ export async function createSubscription(input: {
   let currentPeriodEnd: Date | null = trialEndsAt;
   if (provider) {
     const customerId = await provider.createCustomer({ tenantId: input.tenantId });
-    const sub = await provider.createSubscription({ customerId, plan: input.plan, seats: input.seats ?? 1 });
+    const sub = await provider.createSubscription({ customerId, plan: input.plan, seats: input.seats ?? 1, coupon: input.coupon, automaticTax: input.automaticTax });
     providerRefs = { customerId, subscriptionRef: sub.subscriptionRef };
     currentPeriodEnd = sub.currentPeriodEnd;
   }
