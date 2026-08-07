@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { and, eq, schema, withTenant } from '@crms/database';
-import { newId, NotFound, Forbidden, DestructiveUnconfirmed, createLogger } from '@crms/kernel';
+import { newId, NotFound, Forbidden, ValidationError, DestructiveUnconfirmed, createLogger } from '@crms/kernel';
 import { getContext } from '@crms/tenant-context';
 import { schemaEngine } from '@crms/schema-engine';
 import { createView, createForm, createPipeline, createDashboard } from '@crms/builder-engine';
@@ -123,27 +123,31 @@ export class AiPlanService {
     });
 
     const results: unknown[] = [];
-    try {
-      for (const op of operations) {
+    // Resilient execution: a single bad operation must not sink the whole plan.
+    // Each op's outcome (or error) is recorded; the plan succeeds as long as at
+    // least one op applied, so a partially-valid AI plan still builds the app.
+    let failures = 0;
+    for (const op of operations) {
+      try {
         results.push(await this.applyOperation(op));
+      } catch (err) {
+        failures++;
+        logger.warn({ planId, op: op.op, err: (err as Error).message }, 'AIPlan operation failed; continuing');
+        results.push({ failed: op.op, error: (err as Error).message });
       }
-      await withTenant(async (tx) => {
-        await tx
-          .update(schema.aiExecutions)
-          .set({ status: 'succeeded', results, finishedAt: new Date() })
-          .where(eq(schema.aiExecutions.id, executionId));
-        await tx.update(schema.aiPlans).set({ status: 'executed' }).where(eq(schema.aiPlans.id, planId));
-      });
-      logger.info({ planId, executionId, count: results.length }, 'AIPlan executed');
-    } catch (err) {
-      await withTenant(async (tx) => {
-        await tx
-          .update(schema.aiExecutions)
-          .set({ status: 'failed', results, error: { message: (err as Error).message }, finishedAt: new Date() })
-          .where(eq(schema.aiExecutions.id, executionId));
-        await tx.update(schema.aiPlans).set({ status: 'failed' }).where(eq(schema.aiPlans.id, planId));
-      });
-      throw err;
+    }
+    const allFailed = failures === operations.length && operations.length > 0;
+    await withTenant(async (tx) => {
+      await tx
+        .update(schema.aiExecutions)
+        .set({ status: allFailed ? 'failed' : 'succeeded', results, ...(allFailed ? { error: { message: 'All operations failed' } } : {}), finishedAt: new Date() })
+        .where(eq(schema.aiExecutions.id, executionId));
+      await tx.update(schema.aiPlans).set({ status: allFailed ? 'failed' : 'executed' }).where(eq(schema.aiPlans.id, planId));
+    });
+    logger.info({ planId, executionId, applied: results.length - failures, failures }, 'AIPlan executed');
+    if (allFailed) {
+      const first = (results.find((r) => (r as { error?: string }).error) as { error?: string } | undefined)?.error;
+      throw ValidationError(`AI plan failed: ${first ?? 'no operation could be applied'}`);
     }
     return { executionId, results };
   }

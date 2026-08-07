@@ -99,7 +99,10 @@ async function openAiStyleChat(
       ...(opts.jsonSchemaHint ? { response_format: { type: 'json_object' } } : {}),
     }),
   });
-  if (!res.ok) throw new AppError('DEPENDENCY_FAILED', `AI provider error (${res.status})`, { expose: true });
+  if (!res.ok) {
+    const detail = (await res.text().catch(() => '')).slice(0, 300);
+    throw new AppError('DEPENDENCY_FAILED', `AI provider error (${res.status}) using model '${model}': ${detail}`, { expose: true });
+  }
   const json = (await res.json()) as {
     choices: Array<{ message: { content: string } }>;
     usage?: { prompt_tokens?: number; completion_tokens?: number };
