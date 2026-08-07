@@ -54,19 +54,35 @@ export async function listForms(): Promise<Array<typeof schema.formDefinitions.$
 }
 
 /** Public form metadata (no session) — safe subset for rendering. */
+export interface PublicFormField {
+  key: string;
+  name: string;
+  type: string;
+  required: boolean;
+  config: Record<string, unknown>;
+}
+
 export async function getPublicForm(slug: string): Promise<{
   id: string;
   name: string;
-  fields: unknown[];
+  kind: string;
+  fields: PublicFormField[];
   layout: Record<string, unknown>;
   captchaEnabled: boolean;
 }> {
-  const form = await withElevated(async (tx) => {
-    const [row] = await tx.select().from(schema.formDefinitions).where(eq(schema.formDefinitions.publicSlug, slug));
-    return row ?? null;
+  return withElevated(async (tx) => {
+    const [form] = await tx.select().from(schema.formDefinitions).where(eq(schema.formDefinitions.publicSlug, slug));
+    if (!form) throw NotFound('Form', slug);
+    // Hydrate referenced field ids into renderable field definitions.
+    const refs = (form.fields as Array<{ fieldId?: string; key?: string }>) ?? [];
+    const fields: PublicFormField[] = [];
+    for (const ref of refs) {
+      if (!ref.fieldId) continue;
+      const [f] = await tx.select().from(schema.fieldDefinitions).where(eq(schema.fieldDefinitions.id, ref.fieldId));
+      if (f) fields.push({ key: f.key, name: f.name, type: f.type, required: f.required, config: (f.config as Record<string, unknown>) ?? {} });
+    }
+    return { id: form.id, name: form.name, kind: form.kind, fields, layout: form.layout as Record<string, unknown>, captchaEnabled: form.captchaEnabled };
   });
-  if (!form) throw NotFound('Form', slug);
-  return { id: form.id, name: form.name, fields: form.fields as unknown[], layout: form.layout as Record<string, unknown>, captchaEnabled: form.captchaEnabled };
 }
 
 async function applyDedupe(form: typeof schema.formDefinitions.$inferSelect, data: Record<string, unknown>): Promise<{ mode: 'create' | 'update' | 'reject'; recordId?: string }> {
