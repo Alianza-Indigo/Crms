@@ -42,11 +42,30 @@ Rules:
 - Keep it focused: 4-8 modules. Output ONLY the JSON, no prose, no code fences.`;
 
 function extractJson(text: string): unknown {
-  const cleaned = text.replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim();
+  const cleaned = text.replace(/```(?:json)?/gi, '').trim();
   const start = cleaned.indexOf('{');
-  const end = cleaned.lastIndexOf('}');
-  if (start === -1 || end === -1) throw ValidationError('AI did not return JSON');
-  return JSON.parse(cleaned.slice(start, end + 1));
+  if (start === -1) throw ValidationError('AI did not return JSON');
+  // Scan for the first BALANCED object so trailing prose/objects the model may
+  // append after the JSON don't break parsing (string-aware brace matching).
+  let depth = 0;
+  let inStr = false;
+  let esc = false;
+  for (let i = start; i < cleaned.length; i++) {
+    const ch = cleaned[i]!;
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === '\\') esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') inStr = true;
+    else if (ch === '{') depth++;
+    else if (ch === '}') {
+      depth--;
+      if (depth === 0) return JSON.parse(cleaned.slice(start, i + 1));
+    }
+  }
+  throw ValidationError('AI returned malformed or truncated JSON');
 }
 
 /**
@@ -73,7 +92,7 @@ export async function generatePlanFromPrompt(input: {
     credentialId: input.credentialId,
     messages,
     jsonSchemaHint: 'application design',
-    maxTokens: 4000,
+    maxTokens: 8000,
   });
 
   const raw = extractJson(result.text) as { summary?: string; operations?: unknown[] };
