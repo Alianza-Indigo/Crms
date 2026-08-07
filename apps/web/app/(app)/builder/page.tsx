@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { getClient } from '../../../lib/crms';
 import { VersionsPanel } from '../../../components/builder/VersionsPanel';
+import { TemplatesPanel } from '../../../components/builder/TemplatesPanel';
 
 interface Module {
   id: string;
@@ -157,9 +158,10 @@ export default function BuilderPage() {
             </div>
           </div>
         ))}
-        {modules.length === 0 && !error && <p className="muted">Aún no hay módulos. Créalos aquí o pídeselos a la IA.</p>}
+        {modules.length === 0 && !error && <p className="muted">Aún no hay módulos. Créalos aquí, pídeselos a la IA, o instala una plantilla.</p>}
       </section>
 
+      <TemplatesPanel onApplied={load} />
       <VersionsPanel />
 
       <style jsx>{`

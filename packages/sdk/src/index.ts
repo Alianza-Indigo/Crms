@@ -131,6 +131,11 @@ export class CrmsClient {
       this.request('POST', `/modules/${moduleId}/fields/reorder`, { fieldIds }),
   };
 
+  templates = {
+    list: () => this.request<Array<{ key: string; name: string; description: string; modules: number }>>('GET', '/templates'),
+    apply: (key: string) => this.request<{ planId: string; applied: number }>('POST', `/templates/${key}/apply`),
+  };
+
   relations = {
     list: () => this.request<Array<Record<string, unknown>>>('GET', '/relations'),
     create: (input: Record<string, unknown>) => this.request<{ id: string }>('POST', '/relations', input),
