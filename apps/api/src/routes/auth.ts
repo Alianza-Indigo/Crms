@@ -12,6 +12,9 @@ import {
   isOidcConfigured,
   requestMagicLink,
   verifyMagicLink,
+  isSamlConfigured,
+  buildSamlLoginUrl,
+  handleSamlCallback,
 } from '@crms/auth';
 import { loadEnv } from '@crms/config';
 import { createSubscription } from '@crms/billing';
@@ -105,6 +108,31 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     pub(async (req, reply) => {
       const q = z.object({ token: z.string() }).parse(req.query);
       const session = await verifyMagicLink(q.token, req.ip);
+      const base = loadEnv().APP_BASE_URL;
+      reply.redirect(`${base}/auth/complete#token=${session.token}&new=${session.isNewUser ? '1' : '0'}`);
+    }),
+  );
+
+  // --- SAML 2.0 SSO (PRD §32.1) ---
+  app.get(
+    '/auth/saml/start',
+    pub(async (req, reply) => {
+      if (!isSamlConfigured()) return { configured: false };
+      const { url } = await buildSamlLoginUrl();
+      if ((req.headers.accept ?? '').includes('text/html')) {
+        reply.redirect(url);
+        return;
+      }
+      return { url };
+    }),
+  );
+
+  app.post(
+    '/auth/saml/callback',
+    pub(async (req, reply) => {
+      const body = (req.body ?? {}) as { SAMLResponse?: string };
+      if (!body.SAMLResponse) throw new Error('Missing SAMLResponse');
+      const session = await handleSamlCallback(body.SAMLResponse, req.ip);
       const base = loadEnv().APP_BASE_URL;
       reply.redirect(`${base}/auth/complete#token=${session.token}&new=${session.isNewUser ? '1' : '0'}`);
     }),

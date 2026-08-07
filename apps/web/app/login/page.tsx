@@ -97,6 +97,22 @@ export default function LoginPage() {
         >
           Enviar enlace mágico por email
         </button>
+        <button
+          type="button"
+          className="btn"
+          style={{ width: '100%', background: 'transparent', border: '1px solid var(--border)', color: 'var(--muted)', marginTop: '0.5rem' }}
+          onClick={async () => {
+            try {
+              const res = await api<{ url?: string; configured?: boolean }>('/auth/saml/start');
+              if (res.url) window.location.href = res.url;
+              else setError('SSO (SAML) no está configurado en este despliegue.');
+            } catch (e) {
+              setError(e instanceof Error ? e.message : 'Error');
+            }
+          }}
+        >
+          SSO empresarial (SAML)
+        </button>
         <p className="muted" style={{ marginBottom: 0 }}>
           {mode === 'login' ? '¿No tienes cuenta? ' : '¿Ya tienes cuenta? '}
           <a onClick={() => setMode(mode === 'login' ? 'register' : 'login')} style={{ cursor: 'pointer' }}>

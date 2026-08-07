@@ -19,6 +19,7 @@
     "@crms/database": "workspace:*",
     "@crms/kernel": "workspace:*",
     "@crms/tenant-context": "workspace:*",
+    "@node-saml/node-saml": "^5.1.0",
     "nodemailer": "^6.10.1",
     "zod": "^3.24.1"
   },

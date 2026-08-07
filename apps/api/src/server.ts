@@ -1,5 +1,6 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import formbody from '@fastify/formbody';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import { loadEnv } from '@crms/config';
@@ -34,6 +35,7 @@ export async function buildServer() {
 
   const app = Fastify({ logger: false, trustProxy: true, bodyLimit: 5 * 1024 * 1024 });
 
+  await app.register(formbody); // parse application/x-www-form-urlencoded (SAML POST)
   await app.register(helmet, { contentSecurityPolicy: false });
   await app.register(cors, { origin: true, credentials: true });
   // Rate limiting (PRD §32.3). Keyed per client; tighten per route as needed.
