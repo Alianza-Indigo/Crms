@@ -10,6 +10,8 @@ import {
   buildOidcAuthUrl,
   handleOidcCallback,
   isOidcConfigured,
+  requestMagicLink,
+  verifyMagicLink,
 } from '@crms/auth';
 import { loadEnv } from '@crms/config';
 import { createSubscription } from '@crms/billing';
@@ -84,6 +86,25 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     pub(async (req, reply) => {
       const q = z.object({ code: z.string(), state: z.string() }).parse(req.query);
       const session = await handleOidcCallback({ code: q.code, state: q.state, ip: req.ip });
+      const base = loadEnv().APP_BASE_URL;
+      reply.redirect(`${base}/auth/complete#token=${session.token}&new=${session.isNewUser ? '1' : '0'}`);
+    }),
+  );
+
+  // --- Magic link (passwordless email, PRD §32.1) ---
+  app.post(
+    '/auth/magic-link/request',
+    pub(async (req) => {
+      const body = z.object({ email: z.string().email() }).parse(req.body);
+      return requestMagicLink(body.email);
+    }),
+  );
+
+  app.get(
+    '/auth/magic-link/verify',
+    pub(async (req, reply) => {
+      const q = z.object({ token: z.string() }).parse(req.query);
+      const session = await verifyMagicLink(q.token, req.ip);
       const base = loadEnv().APP_BASE_URL;
       reply.redirect(`${base}/auth/complete#token=${session.token}&new=${session.isNewUser ? '1' : '0'}`);
     }),

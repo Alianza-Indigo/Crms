@@ -75,6 +75,28 @@ export default function LoginPage() {
         >
           Continuar con Google
         </button>
+        <button
+          type="button"
+          className="btn"
+          style={{ width: '100%', background: 'transparent', border: '1px solid var(--border)', color: 'var(--muted)', marginTop: '0.5rem' }}
+          onClick={async () => {
+            setError(null);
+            if (!email) {
+              setError('Escribe tu email primero.');
+              return;
+            }
+            try {
+              const res = await api<{ sent: boolean; link?: string }>('/auth/magic-link/request', { method: 'POST', body: JSON.stringify({ email }) });
+              if (res.sent) setError('Te enviamos un enlace de acceso. Revisa tu correo.');
+              else if (res.link) window.location.href = res.link;
+              else setError('No se pudo generar el enlace.');
+            } catch (e) {
+              setError(e instanceof Error ? e.message : 'Error');
+            }
+          }}
+        >
+          Enviar enlace mágico por email
+        </button>
         <p className="muted" style={{ marginBottom: 0 }}>
           {mode === 'login' ? '¿No tienes cuenta? ' : '¿Ya tienes cuenta? '}
           <a onClick={() => setMode(mode === 'login' ? 'register' : 'login')} style={{ cursor: 'pointer' }}>

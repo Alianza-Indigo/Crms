@@ -41,6 +41,22 @@ const EnvSchema = z.object({
   OIDC_CLIENT_SECRET: z.string().optional(),
   OIDC_REDIRECT_URI: z.string().url().optional(),
 
+  // SAML 2.0 SSO (PRD §32.1). When set, the SAML SP login is enabled.
+  SAML_ENTRY_POINT: z.string().url().optional(), // IdP SSO URL
+  SAML_ISSUER: z.string().optional(), // SP entity id
+  SAML_CERT: z.string().optional(), // IdP signing certificate (PEM, base64 or raw)
+  SAML_CALLBACK_URL: z.string().url().optional(),
+
+  // Platform SMTP for pre-auth emails (magic links). Optional: when unset, the
+  // magic-link endpoint returns the link directly (useful in dev).
+  SMTP_URL: z.string().optional(), // smtp://user:pass@host:port
+  SMTP_FROM: z.string().optional(),
+
+  // Antivirus (ClamAV clamd) for uploaded files (PRD §32.2). When unset, scanning
+  // is skipped (fail-open in dev); set to enforce.
+  CLAMAV_HOST: z.string().optional(),
+  CLAMAV_PORT: z.coerce.number().int().positive().optional(),
+
   // Stripe (platform SaaS billing only — never tenant payments). When set, the
   // billing engine auto-registers the Stripe provider. Plan→price map is JSON:
   // {"trial":"price_...","pro":"price_..."}.
