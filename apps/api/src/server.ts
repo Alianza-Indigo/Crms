@@ -35,6 +35,21 @@ export async function buildServer() {
 
   const app = Fastify({ logger: false, trustProxy: true, bodyLimit: 5 * 1024 * 1024 });
 
+  // Tolerate empty JSON bodies. Several POST endpoints take no payload
+  // (e.g. /ai/plans/:id/approve and /execute), but browser clients still send
+  // `content-type: application/json`. Fastify's default parser rejects an empty
+  // body with a 500 before the handler runs; treat empty as an empty object.
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) => {
+    const text = (body as string).trim();
+    if (!text) return done(null, {});
+    try {
+      done(null, JSON.parse(text));
+    } catch (err) {
+      (err as { statusCode?: number }).statusCode = 400;
+      done(err as Error, undefined);
+    }
+  });
+
   await app.register(formbody); // parse application/x-www-form-urlencoded (SAML POST)
   await app.register(helmet, { contentSecurityPolicy: false });
   await app.register(cors, { origin: true, credentials: true });
