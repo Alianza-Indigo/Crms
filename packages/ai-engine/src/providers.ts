@@ -88,17 +88,22 @@ async function openAiStyleChat(
   model: string,
   opts: ChatOptions,
 ): Promise<ChatResult> {
-  const res = await meteredFetch(opts.provider, `${baseUrl}/chat/completions`, {
-    method: 'POST',
-    kind: 'ai_tokens',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${secret.apiKey as string}` },
-    body: JSON.stringify({
-      model,
-      messages: opts.messages,
-      max_tokens: opts.maxTokens ?? 2048,
-      ...(opts.jsonSchemaHint ? { response_format: { type: 'json_object' } } : {}),
-    }),
-  });
+  let res: Response;
+  try {
+    res = await meteredFetch(opts.provider, `${baseUrl}/chat/completions`, {
+      method: 'POST',
+      kind: 'ai_tokens',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${secret.apiKey as string}` },
+      body: JSON.stringify({
+        model,
+        messages: opts.messages,
+        max_tokens: opts.maxTokens ?? 2048,
+        ...(opts.jsonSchemaHint ? { response_format: { type: 'json_object' } } : {}),
+      }),
+    });
+  } catch (err) {
+    throw new AppError('DEPENDENCY_FAILED', `Could not reach the AI provider at ${baseUrl}: ${(err as Error).message}`, { expose: true });
+  }
   if (!res.ok) {
     const detail = (await res.text().catch(() => '')).slice(0, 300);
     throw new AppError('DEPENDENCY_FAILED', `AI provider error (${res.status}) using model '${model}': ${detail}`, { expose: true });

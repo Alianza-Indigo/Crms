@@ -2,7 +2,14 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { aiPlanService, generatePlanFromPrompt } from '@crms/ai-engine';
 import { audit } from '@crms/audit';
+import { AppError, isAppError } from '@crms/kernel';
 import { authed } from '../lib/context.js';
+
+/** Surface the real cause of AI failures to the client (operational, not secret). */
+function exposeAiError(err: unknown): never {
+  if (isAppError(err) && err.expose) throw err;
+  throw new AppError('DEPENDENCY_FAILED', `AI generation failed: ${(err as Error)?.message ?? 'unknown error'}`, { expose: true });
+}
 
 /**
  * AI routes (PRD §9). The AI proposes a persisted, approvable plan; destructive
@@ -18,7 +25,12 @@ export async function aiRoutes(app: FastifyInstance): Promise<void> {
       const body = z
         .object({ prompt: z.string().min(4), provider: z.string().default('openai'), credentialKey: z.string().optional(), credentialId: z.string().optional() })
         .parse(req.body);
-      const result = await generatePlanFromPrompt(body);
+      let result;
+      try {
+        result = await generatePlanFromPrompt(body);
+      } catch (err) {
+        exposeAiError(err);
+      }
       await audit({ action: 'ai.generate', resourceType: 'ai_plan', resourceId: result.planId });
       return result;
     }),

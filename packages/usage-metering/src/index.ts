@@ -72,7 +72,7 @@ export async function meteredFetch(
     const res = await fetch(input, requestInit);
     const cloned = res.clone();
     const buf = await cloned.arrayBuffer().catch(() => new ArrayBuffer(0));
-    await recordUsage({
+    await safeRecord({
       provider,
       kind,
       durationMs: Date.now() - start,
@@ -83,14 +83,16 @@ export async function meteredFetch(
     });
     return res;
   } catch (err) {
-    await recordUsage({
-      provider,
-      kind,
-      durationMs: Date.now() - start,
-      bytesIn,
-      status: 'network_error',
-      errorCount: 1,
-    });
+    await safeRecord({ provider, kind, durationMs: Date.now() - start, bytesIn, status: 'network_error', errorCount: 1 });
     throw err;
+  }
+}
+
+/** Usage telemetry must never break the actual request it is measuring. */
+async function safeRecord(rec: Parameters<typeof recordUsage>[0]): Promise<void> {
+  try {
+    await recordUsage(rec);
+  } catch {
+    /* swallow: metering is best-effort */
   }
 }
