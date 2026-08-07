@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { getClient, setActiveApp, getActiveApp, isAuthed, logout } from '../lib/crms';
+import { CommandPalette } from './CommandPalette';
 
 interface App {
   id: string;
@@ -124,6 +125,7 @@ export function Shell({ children }: { children: ReactNode }) {
         </button>
       </aside>
       <main style={{ padding: '1.75rem 2rem', overflowX: 'hidden' }}>{children}</main>
+      <CommandPalette isAdmin={isAdmin} />
     </div>
   );
 }
