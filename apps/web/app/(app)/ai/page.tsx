@@ -1,17 +1,27 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { getClient } from '../../../lib/crms';
 
 interface Op {
   op: string;
   args: Record<string, unknown>;
 }
+interface Cred {
+  id: string;
+  key: string;
+  name: string;
+  provider: string;
+}
+
+const AI_PROVIDERS = new Set(['openai', 'anthropic', 'google_ai', 'gemini', 'azure_openai']);
 
 /** AI application generation (PRD §9.1): prompt → plan → approve → execute. */
 export default function AiPage() {
   const [prompt, setPrompt] = useState('');
-  const [credentialKey, setCredentialKey] = useState('OPENAI');
+  const [creds, setCreds] = useState<Cred[]>([]);
+  const [credentialKey, setCredentialKey] = useState('');
   const [planId, setPlanId] = useState<string | null>(null);
   const [ops, setOps] = useState<Op[]>([]);
   const [summary, setSummary] = useState('');
@@ -19,13 +29,29 @@ export default function AiPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    getClient()
+      .credentials.list()
+      .then((list) => {
+        const ai = (list as unknown as Cred[]).filter((c) => AI_PROVIDERS.has(c.provider));
+        setCreds(ai);
+        if (ai[0]) setCredentialKey(ai[0].key);
+      })
+      .catch(() => {});
+  }, []);
+
   async function generate(e: React.FormEvent) {
     e.preventDefault();
+    if (!credentialKey) {
+      setError('Elige una credencial de IA (o agrega una en Credenciales).');
+      return;
+    }
     setBusy(true);
     setError(null);
     setStatus(null);
     try {
-      const res = await getClient().ai.generate(prompt, 'openai', credentialKey);
+      const provider = creds.find((c) => c.key === credentialKey)?.provider ?? 'openai';
+      const res = await getClient().ai.generate(prompt, provider, credentialKey);
       setPlanId(res.planId);
       const plan = res.plan as { summary?: string; operations?: Op[] };
       setSummary(plan.summary ?? '');
@@ -72,10 +98,22 @@ export default function AiPage() {
           />
         </label>
         <label>
-          Clave de credencial de IA
-          <input className="input" value={credentialKey} onChange={(e) => setCredentialKey(e.target.value)} />
+          Credencial de IA
+          {creds.length > 0 ? (
+            <select className="input" value={credentialKey} onChange={(e) => setCredentialKey(e.target.value)}>
+              {creds.map((c) => (
+                <option key={c.id} value={c.key}>
+                  {c.name} ({c.provider})
+                </option>
+              ))}
+            </select>
+          ) : (
+            <div className="muted" style={{ fontSize: '0.9rem' }}>
+              No tienes credenciales de IA. <Link href="/credentials">Agrega una</Link> (OpenAI, Anthropic o Google Gemini).
+            </div>
+          )}
         </label>
-        <button className="btn" disabled={busy}>
+        <button className="btn" disabled={busy || creds.length === 0}>
           {busy ? '…' : 'Generar plan'}
         </button>
       </form>
