@@ -2,6 +2,9 @@ import { createHmac, createHash } from 'node:crypto';
 import { loadEnv } from '@crms/config';
 import { getContext } from '@crms/tenant-context';
 import { createLogger } from '@crms/kernel';
+import { assertClean } from './antivirus.js';
+
+export * from './antivirus.js';
 
 const logger = createLogger('storage');
 
@@ -113,6 +116,7 @@ export function presignDownload(key: string, expiresSeconds = 900, creds?: Stora
 
 /** Server-side upload for platform-generated artifacts (documents, exports). */
 export async function putObject(key: string, body: Buffer, contentType: string, creds?: StorageCreds): Promise<void> {
+  await assertClean(body); // reject malware before it ever reaches storage (PRD §32.2)
   const url = presignUpload(key, 300, creds);
   const res = await fetch(url, { method: 'PUT', body, headers: { 'content-type': contentType } });
   if (!res.ok) {

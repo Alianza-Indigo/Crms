@@ -104,6 +104,9 @@ importers:
       '@crms/search-engine':
         specifier: workspace:*
         version: link:../../packages/search-engine
+      '@crms/storage':
+        specifier: workspace:*
+        version: link:../../packages/storage
       '@crms/tenant-context':
         specifier: workspace:*
         version: link:../../packages/tenant-context

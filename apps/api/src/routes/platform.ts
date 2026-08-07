@@ -240,6 +240,13 @@ export async function platformRoutes(app: FastifyInstance): Promise<void> {
     return { ok: true };
   }));
 
+  // --- Antivirus scan of an uploaded file (PRD §32.2) ---
+  app.post('/files/scan', authed(async (req) => {
+    const { scanBuffer } = await import('@crms/storage');
+    const body = z.object({ content: z.string() }).parse(req.body); // base64
+    return scanBuffer(Buffer.from(body.content, 'base64'));
+  }));
+
   app.get('/service-accounts', authed(async () => {
     const ctx = getContext();
     return withTenant(async (tx) =>
