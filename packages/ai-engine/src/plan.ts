@@ -23,6 +23,10 @@ export const AiOperationSchema = z.object({
     'create_pipeline',
     'create_dashboard',
     'create_automation',
+    'create_role',
+    'create_document_template',
+    'create_portal',
+    'create_agent',
     'delete_module',
     'delete_field',
   ]),
@@ -195,6 +199,83 @@ export class AiPlanService {
         });
         return { id: autoId, op: 'create_automation' };
       }
+      case 'create_role': {
+        const ctx = getContext();
+        const roleId = newId('role');
+        await withTenant(async (tx) => {
+          await tx.insert(schema.roles).values({
+            id: roleId,
+            tenantId: ctx.tenantId,
+            applicationId: ctx.applicationId ?? null,
+            name: args.name as string,
+            description: (args.description as string) ?? null,
+            permissions: (args.permissions as string[]) ?? [],
+            createdBy: ctx.userId,
+          });
+        });
+        return { id: roleId, op: 'create_role' };
+      }
+      case 'create_document_template': {
+        const ctx = getContext();
+        const tplId = newId('documentTemplate');
+        await withTenant(async (tx) => {
+          await tx.insert(schema.documentTemplates).values({
+            id: tplId,
+            tenantId: ctx.tenantId,
+            applicationId: ctx.applicationId ?? '',
+            environment: ctx.environment,
+            key: args.key as string,
+            name: args.name as string,
+            kind: 'document',
+            body: { html: (args.html as string) ?? '<h1>{{title}}</h1>' },
+            outputs: ['pdf'],
+            moduleId: (args.moduleId as string) ?? null,
+            createdBy: ctx.userId,
+          });
+        });
+        return { id: tplId, op: 'create_document_template' };
+      }
+      case 'create_portal': {
+        const ctx = getContext();
+        const moduleIds = await moduleIdsForKeys((args.moduleKeys as string[]) ?? []);
+        const portalId = newId('portal');
+        await withTenant(async (tx) => {
+          await tx.insert(schema.portalDefinitions).values({
+            id: portalId,
+            tenantId: ctx.tenantId,
+            applicationId: ctx.applicationId ?? '',
+            environment: ctx.environment,
+            key: args.key as string,
+            name: args.name as string,
+            audience: (args.audience as string) ?? 'clients',
+            exposure: { modules: moduleIds.map((id) => ({ moduleId: id, actions: ['view', 'create'] })) } as never,
+            active: true,
+            createdBy: ctx.userId,
+          });
+        });
+        return { id: portalId, op: 'create_portal' };
+      }
+      case 'create_agent': {
+        const ctx = getContext();
+        const accessibleModuleIds = await moduleIdsForKeys((args.accessibleModuleKeys as string[]) ?? []);
+        const agentId = newId('agent');
+        await withTenant(async (tx) => {
+          await tx.insert(schema.agentDefinitions).values({
+            id: agentId,
+            tenantId: ctx.tenantId,
+            applicationId: ctx.applicationId!,
+            environment: ctx.environment,
+            name: args.name as string,
+            purpose: (args.purpose as string) ?? null,
+            instructions: (args.instructions as string) ?? null,
+            provider: (args.provider as string) ?? 'google_ai',
+            accessibleModuleIds,
+            allowedActions: (args.allowedActions as string[]) ?? ['read_records'],
+            createdBy: ctx.userId,
+          });
+        });
+        return { id: agentId, op: 'create_agent' };
+      }
       case 'delete_module':
         return schemaEngine.deleteModule(args.moduleId as string, { confirm: true });
       case 'delete_field':
@@ -203,6 +284,16 @@ export class AiPlanService {
         return { skipped: op.op, reason: 'operation not yet supported' };
     }
   }
+}
+
+/** Resolve several module keys → ids (skips unknown keys). */
+async function moduleIdsForKeys(keys: string[]): Promise<string[]> {
+  const ids: string[] = [];
+  for (const k of keys) {
+    const id = await moduleIdForKey(k);
+    if (id) ids.push(id);
+  }
+  return ids;
 }
 
 /** Resolve a single module key → id within the current app/env. */
