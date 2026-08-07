@@ -219,6 +219,22 @@ export class CrmsClient {
       this.request<{ rounds: number; toolCalls: unknown[]; reply?: string; messages?: unknown[] }>('POST', `/agents/${agentId}/run`, { message }),
   };
 
+  // Platform-admin global console (PRD §44).
+  admin = {
+    overview: () =>
+      this.request<{ tenants: number; users: number; applications: number; tenantsByStatus: Array<{ status: string; count: number }> }>('GET', '/admin/overview'),
+    tenants: () => this.request<Array<Record<string, unknown>>>('GET', '/admin/tenants'),
+    setTenantStatus: (tenantId: string, status: string) =>
+      this.request('POST', `/admin/tenants/${tenantId}/status`, { status }),
+    resellers: () => this.request<Array<Record<string, unknown>>>('GET', '/admin/resellers'),
+    createReseller: (name: string, slug: string) => this.request<{ id: string }>('POST', '/admin/resellers', { name, slug }),
+    flags: () => this.request<Array<Record<string, unknown>>>('GET', '/admin/flags'),
+    setFlag: (key: string, enabled: boolean, rolloutPercentage?: number) =>
+      this.request('POST', '/admin/flags', { key, enabled, rolloutPercentage }),
+    impersonate: (targetUserId: string, ttlSeconds?: number) =>
+      this.request('POST', '/admin/impersonate', { targetUserId, ttlSeconds }),
+  };
+
   credentials = {
     list: () => this.request<Array<Record<string, unknown>>>('GET', '/credentials'),
     create: (input: Record<string, unknown>) => this.request<Record<string, unknown>>('POST', '/credentials', input),

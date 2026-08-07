@@ -15,6 +15,7 @@ import { credentialRoutes } from './routes/credentials.js';
 import { aiRoutes } from './routes/ai.js';
 import { platformRoutes } from './routes/platform.js';
 import { adminRoutes } from './routes/admin.js';
+import { adminConsoleRoutes } from './routes/admin-console.js';
 import { automationRoutes } from './routes/automations.js';
 import { realtimeRoutes } from './routes/realtime.js';
 import { documentRoutes } from './routes/documents.js';
@@ -57,6 +58,7 @@ export async function buildServer() {
   await app.register(aiRoutes, { prefix: '/v1' });
   await app.register(platformRoutes, { prefix: '/v1' });
   await app.register(adminRoutes, { prefix: '/v1' });
+  await app.register(adminConsoleRoutes, { prefix: '/v1' });
   await app.register(automationRoutes, { prefix: '/v1' });
   await app.register(realtimeRoutes, { prefix: '/v1' });
   await app.register(documentRoutes, { prefix: '/v1' });

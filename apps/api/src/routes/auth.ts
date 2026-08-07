@@ -108,6 +108,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       environment: ctx.environment,
       roleIds: ctx.roleIds,
       impersonation: ctx.impersonation,
+      isPlatformAdmin: ctx.isPlatformAdmin,
     };
   }));
 

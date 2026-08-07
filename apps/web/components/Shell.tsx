@@ -30,6 +30,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const [apps, setApps] = useState<App[]>([]);
   const [active, setActive] = useState<string | null>(null);
   const [env, setEnv] = useState('production');
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     if (!isAuthed()) {
@@ -48,6 +49,10 @@ export function Shell({ children }: { children: ReactNode }) {
           setActive(list[0].id);
         }
       })
+      .catch(() => {});
+    getClient()
+      .auth.me()
+      .then((me) => setIsAdmin(Boolean((me as { isPlatformAdmin?: boolean }).isPlatformAdmin)))
       .catch(() => {});
   }, [router]);
 
@@ -84,7 +89,7 @@ export function Shell({ children }: { children: ReactNode }) {
           ))}
         </select>
         <nav style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem', marginTop: '0.75rem' }}>
-          {NAV.map(([href, label]) => {
+          {(isAdmin ? [...NAV, ['/admin', '🛡️ Admin']] : NAV).map(([href, label]) => {
             const activeLink = pathname.startsWith(href);
             return (
               <Link
