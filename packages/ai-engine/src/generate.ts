@@ -14,16 +14,27 @@ const logger = createLogger('ai-engine:generate');
  * the AI never mutates the app directly.
  */
 const SYSTEM_PROMPT = `You are the architect of a multi-tenant business-application platform.
-Given a description of a business or process, design the data model as a JSON object with this exact shape:
+Given a description of a business or process, design a COMPLETE, usable application — not just the data model, but the views, capture forms, sales/process pipelines, dashboards and follow-up automations a team would actually use.
+
+Return ONE JSON object with this exact shape:
 {
   "summary": "one paragraph describing what you will build",
   "operations": [
-    { "op": "create_module", "args": { "key": "snake_case", "name": "Singular", "namePlural": "Plural" } },
-    { "op": "create_field", "args": { "moduleKey": "snake_case", "key": "snake_case", "name": "Label", "type": "text_short|text_long|integer|decimal|currency|date|datetime|email|phone|url|boolean|select|multi_select|status|user|file", "required": false, "config": {} } },
-    { "op": "create_relation", "args": { "key": "snake_case", "name": "Label", "type": "one_to_many|many_to_many", "sourceModuleKey": "snake_case", "targetModuleKey": "snake_case" } }
+    { "op": "create_module", "args": { "key": "snake_case", "name": "Singular", "namePlural": "Plural", "icon": "📇" } },
+    { "op": "create_field", "args": { "moduleKey": "snake_case", "key": "snake_case", "name": "Label", "type": "text_short|text_long|integer|decimal|currency|percent|date|datetime|email|phone|url|boolean|select|multi_select|status|user|file", "required": false, "config": {} } },
+    { "op": "create_relation", "args": { "key": "snake_case", "name": "Label", "type": "one_to_many|many_to_many", "sourceModuleKey": "snake_case", "targetModuleKey": "snake_case" } },
+    { "op": "create_view", "args": { "moduleKey": "snake_case", "key": "snake_case", "name": "Label", "type": "table|kanban|calendar|gallery|list" } },
+    { "op": "create_form", "args": { "moduleKey": "snake_case", "key": "snake_case", "name": "Label", "kind": "internal|public" } },
+    { "op": "create_pipeline", "args": { "moduleKey": "snake_case", "key": "snake_case", "name": "Label", "stages": [{"key":"snake_case","name":"Label"}], "transitions": [{"from":"stage_key","to":"stage_key"}] } },
+    { "op": "create_dashboard", "args": { "key": "snake_case", "name": "Label", "widgets": [{ "key": "snake_case", "title": "Label", "type": "metric|bar", "moduleKey": "snake_case", "aggregate": "count|sum|avg", "field": "field_key", "groupBy": "field_key_or_stage" }] } },
+    { "op": "create_automation", "args": { "key": "snake_case", "name": "Label", "trigger": { "event": "record.created|record.updated|record.stage_changed", "moduleKey": "snake_case" }, "graph": { "start": "a1", "nodes": [{ "id": "a1", "type": "action", "config": { "action": "notify|create_record|update_record|run_ai", "message": "..." } }], "edges": [] } }
   ]
 }
-Rules: use snake_case keys; select/status fields must include config.options as [{"value","label"}]; keep it focused (5-8 modules max). Output ONLY the JSON, no prose, no code fences.`;
+Rules:
+- Use snake_case keys everywhere. select/status fields MUST include config.options as [{"value","label"}].
+- ORDER matters: emit create_module first, then create_field and create_relation, then create_view/create_form/create_pipeline/create_dashboard/create_automation which reference modules by their key.
+- Design for real use: for the main process module add a "status" field, a pipeline whose stages match it, and a kanban view; add a public capture form for lead/intake modules; add at least one dashboard with 2-3 widgets; add 1-2 follow-up automations.
+- Keep it focused: 4-8 modules. Output ONLY the JSON, no prose, no code fences.`;
 
 function extractJson(text: string): unknown {
   const cleaned = text.replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim();

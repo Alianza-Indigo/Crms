@@ -8,6 +8,7 @@
   "exports": { ".": "./src/index.ts" },
   "scripts": { "typecheck": "tsc --noEmit", "test": "vitest run", "clean": "rm -rf dist .turbo" },
   "dependencies": {
+    "@crms/builder-engine": "workspace:*",
     "@crms/credential-engine": "workspace:*",
     "@crms/database": "workspace:*",
     "@crms/kernel": "workspace:*",

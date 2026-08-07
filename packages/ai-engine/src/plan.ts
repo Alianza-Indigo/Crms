@@ -3,6 +3,7 @@ import { and, eq, schema, withTenant } from '@crms/database';
 import { newId, NotFound, Forbidden, DestructiveUnconfirmed, createLogger } from '@crms/kernel';
 import { getContext } from '@crms/tenant-context';
 import { schemaEngine } from '@crms/schema-engine';
+import { createView, createForm, createPipeline, createDashboard } from '@crms/builder-engine';
 
 const logger = createLogger('ai-engine');
 
@@ -18,6 +19,10 @@ export const AiOperationSchema = z.object({
     'create_field',
     'create_relation',
     'create_view',
+    'create_form',
+    'create_pipeline',
+    'create_dashboard',
+    'create_automation',
     'delete_module',
     'delete_field',
   ]),
@@ -149,12 +154,74 @@ export class AiPlanService {
         return schemaEngine.createField(args as never);
       case 'create_relation':
         return schemaEngine.createRelation(args as never);
+      case 'create_view':
+        return createView(args as never);
+      case 'create_form':
+        return createForm(args as never);
+      case 'create_pipeline':
+        return createPipeline(args as never);
+      case 'create_dashboard': {
+        // Each widget references its module by key; resolve to ids.
+        const widgets = Array.isArray(args.widgets) ? (args.widgets as Array<Record<string, unknown>>) : [];
+        for (const w of widgets) {
+          if (typeof w.moduleKey === 'string' && !w.moduleId) {
+            const id = await moduleIdForKey(w.moduleKey);
+            if (id) w.moduleId = id;
+          }
+        }
+        return createDashboard({ key: args.key as string, name: args.name as string, widgets: widgets as never });
+      }
+      case 'create_automation': {
+        const ctx = getContext();
+        const trigger = { ...((args.trigger as Record<string, unknown>) ?? {}) };
+        if (typeof trigger.moduleKey === 'string' && !trigger.moduleId) {
+          const id = await moduleIdForKey(trigger.moduleKey);
+          if (id) trigger.moduleId = id;
+        }
+        const autoId = newId('automation');
+        await withTenant(async (tx) => {
+          await tx.insert(schema.automationDefinitions).values({
+            id: autoId,
+            tenantId: ctx.tenantId,
+            applicationId: ctx.applicationId!,
+            environment: ctx.environment,
+            key: args.key as string,
+            name: args.name as string,
+            status: 'active',
+            trigger,
+            graph: (args.graph as never) ?? ({ nodes: [] } as never),
+            createdBy: ctx.userId,
+          });
+        });
+        return { id: autoId, op: 'create_automation' };
+      }
+      case 'delete_module':
+        return schemaEngine.deleteModule(args.moduleId as string, { confirm: true });
       case 'delete_field':
         return schemaEngine.deleteField(args.fieldId as string, { confirm: true });
       default:
         return { skipped: op.op, reason: 'operation not yet supported' };
     }
   }
+}
+
+/** Resolve a single module key → id within the current app/env. */
+async function moduleIdForKey(key: string): Promise<string | null> {
+  const ctx = getContext();
+  if (!ctx.applicationId) return null;
+  return withTenant(async (tx) => {
+    const [row] = await tx
+      .select()
+      .from(schema.moduleDefinitions)
+      .where(
+        and(
+          eq(schema.moduleDefinitions.applicationId, ctx.applicationId!),
+          eq(schema.moduleDefinitions.environment, ctx.environment),
+          eq(schema.moduleDefinitions.key, key),
+        ),
+      );
+    return row?.id ?? null;
+  });
 }
 
 /** Resolve module keys → ids within the current app/env (for generated plans). */

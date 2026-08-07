@@ -240,6 +240,9 @@ importers:
 
   packages/ai-engine:
     dependencies:
+      '@crms/builder-engine':
+        specifier: workspace:*
+        version: link:../builder-engine
       '@crms/credential-engine':
         specifier: workspace:*
         version: link:../credential-engine
