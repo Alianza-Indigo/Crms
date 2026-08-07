@@ -2,6 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { createPortal, registerPortalUser, loginPortalUser, listPortalRecords, createPortalRecord } from '@crms/portal-engine';
 import { getPublicForm, submitPublicForm } from '@crms/builder-engine';
+import { and, eq, schema, withTenant } from '@crms/database';
+import { getContext } from '@crms/tenant-context';
 import { assert } from '@crms/permissions';
 import { authed, pub } from '../lib/context.js';
 
@@ -15,10 +17,26 @@ function portalToken(req: { headers: Record<string, unknown> }): string {
  * public (external users) and scoped to the portal's exposure by the engine.
  */
 export async function portalRoutes(app: FastifyInstance): Promise<void> {
-  // Tenant-side: create a portal (authenticated).
+  // Tenant-side: list + create portals (authenticated).
+  app.get('/portals', authed(async () => {
+    const ctx = getContext();
+    return withTenant(async (tx) =>
+      tx
+        .select()
+        .from(schema.portalDefinitions)
+        .where(
+          and(
+            eq(schema.portalDefinitions.applicationId, ctx.applicationId ?? ''),
+            eq(schema.portalDefinitions.environment, ctx.environment),
+          ),
+        ),
+    );
+  }));
+
   app.post('/portals', authed(async (req) => {
     await assert('manage_config', { type: 'portal' });
-    return createPortal(req.body as never);
+    const ctx = getContext();
+    return createPortal({ applicationId: ctx.applicationId ?? '', ...(req.body as Record<string, unknown>) } as never);
   }));
 
   // External portal auth (public).

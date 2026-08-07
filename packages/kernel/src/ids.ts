@@ -23,6 +23,7 @@ export const ID_PREFIXES = {
   workflow: 'wfl',
   automation: 'aut',
   document: 'doc',
+  documentTemplate: 'dtpl',
   portal: 'por',
   integration: 'int',
   credential: 'cred',

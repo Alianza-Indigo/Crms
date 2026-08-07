@@ -188,6 +188,37 @@ export class CrmsClient {
     executePlan: (planId: string) => this.request<{ executionId: string }>('POST', `/ai/plans/${planId}/execute`),
   };
 
+  automations = {
+    list: () => this.request<Array<Record<string, unknown>>>('GET', '/automations'),
+    create: (input: Record<string, unknown>) => this.request<{ id: string }>('POST', '/automations', input),
+    runs: (automationId?: string) =>
+      this.request<Array<Record<string, unknown>>>('GET', `/automations/runs${automationId ? `?automationId=${automationId}` : ''}`),
+    approve: (runId: string, decision: 'approved' | 'rejected') =>
+      this.request('POST', `/automations/runs/${runId}/approve`, { decision }),
+  };
+
+  documents = {
+    templates: () => this.request<Array<Record<string, unknown>>>('GET', '/documents/templates'),
+    createTemplate: (input: Record<string, unknown>) => this.request<{ id: string }>('POST', '/documents/templates', input),
+    list: () => this.request<Array<Record<string, unknown>>>('GET', '/documents'),
+    generate: (input: { templateId: string; recordId?: string; data: Record<string, unknown>; output?: 'pdf' | 'html' }) =>
+      this.request<{ documentId: string }>('POST', '/documents/generate', input),
+    requestSignatures: (documentId: string, signers: Array<{ email: string; name?: string }>) =>
+      this.request<{ requests: unknown[] }>('POST', `/documents/${documentId}/signatures`, { signers }),
+  };
+
+  portals = {
+    list: () => this.request<Array<Record<string, unknown>>>('GET', '/portals'),
+    create: (input: Record<string, unknown>) => this.request<Record<string, unknown>>('POST', '/portals', input),
+  };
+
+  agents = {
+    list: () => this.request<Array<Record<string, unknown>>>('GET', '/agents'),
+    create: (input: Record<string, unknown>) => this.request<{ id: string }>('POST', '/agents', input),
+    run: (agentId: string, message: string) =>
+      this.request<{ rounds: number; toolCalls: unknown[]; reply?: string; messages?: unknown[] }>('POST', `/agents/${agentId}/run`, { message }),
+  };
+
   credentials = {
     list: () => this.request<Array<Record<string, unknown>>>('GET', '/credentials'),
     create: (input: Record<string, unknown>) => this.request<Record<string, unknown>>('POST', '/credentials', input),
