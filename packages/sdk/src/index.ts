@@ -136,6 +136,12 @@ export class CrmsClient {
     apply: (key: string) => this.request<{ planId: string; applied: number }>('POST', `/templates/${key}/apply`),
   };
 
+  imports = {
+    create: (input: { moduleId: string; format: 'csv' | 'json' | 'xlsx'; content: string; mapping?: Record<string, string>; dedupeField?: string; updateExisting?: boolean }) =>
+      this.request<{ jobId: string }>('POST', '/imports', input),
+    get: (jobId: string) => this.request<Record<string, unknown>>('GET', `/imports/${jobId}`),
+  };
+
   relations = {
     list: () => this.request<Array<Record<string, unknown>>>('GET', '/relations'),
     create: (input: Record<string, unknown>) => this.request<{ id: string }>('POST', '/relations', input),

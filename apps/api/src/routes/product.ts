@@ -60,7 +60,7 @@ export async function productRoutes(app: FastifyInstance): Promise<void> {
   app.post('/imports', authed(async (req) => {
     await assert('import', { type: 'record' });
     const body = z
-      .object({ moduleId: z.string(), format: z.enum(['csv', 'json']), content: z.string(), mapping: z.record(z.string()).optional(), dedupeField: z.string().optional(), updateExisting: z.boolean().optional() })
+      .object({ moduleId: z.string(), format: z.enum(['csv', 'json', 'xlsx']), content: z.string(), mapping: z.record(z.string()).optional(), dedupeField: z.string().optional(), updateExisting: z.boolean().optional() })
       .parse(req.body);
     const jobId = await createImportJob(body);
     await audit({ action: 'import.create', resourceType: 'module', resourceId: body.moduleId, metadata: { jobId } });

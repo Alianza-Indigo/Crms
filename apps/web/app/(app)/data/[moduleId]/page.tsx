@@ -29,6 +29,38 @@ export default function DataPage({ params }: { params: Promise<{ moduleId: strin
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [open, setOpen] = useState(false);
   const [commentsFor, setCommentsFor] = useState<Record_ | null>(null);
+  const [importing, setImporting] = useState(false);
+
+  async function onImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setImporting(true);
+    setError(null);
+    try {
+      const isXlsx = /\.xlsx$/i.test(file.name);
+      let content: string;
+      let format: 'csv' | 'xlsx';
+      if (isXlsx) {
+        const buf = await file.arrayBuffer();
+        let bin = '';
+        const bytes = new Uint8Array(buf);
+        for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]!);
+        content = btoa(bin);
+        format = 'xlsx';
+      } else {
+        content = await file.text();
+        format = 'csv';
+      }
+      await getClient().imports.create({ moduleId, format, content });
+      setTimeout(load, 1500);
+      alert('Importación en proceso. Los registros aparecerán en unos segundos.');
+    } catch (e2) {
+      setError(e2 instanceof Error ? e2.message : 'Error');
+    } finally {
+      setImporting(false);
+    }
+  }
 
   const stageField = useMemo(() => fields.find((f) => f.type === 'status' || f.key === 'stage'), [fields]);
 
@@ -93,6 +125,10 @@ export default function DataPage({ params }: { params: Promise<{ moduleId: strin
               Kanban
             </button>
           )}
+          <label className="btn" style={{ background: 'transparent', border: '1px solid var(--border)', cursor: 'pointer' }}>
+            {importing ? 'Importando…' : '⬆ Importar'}
+            <input type="file" accept=".csv,.xlsx" onChange={onImportFile} style={{ display: 'none' }} disabled={importing} />
+          </label>
           <button className="btn" onClick={() => setOpen((v) => !v)}>
             {open ? 'Cancelar' : '+ Registro'}
           </button>

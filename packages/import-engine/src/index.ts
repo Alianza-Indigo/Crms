@@ -3,15 +3,17 @@ import { newId, NotFound, createLogger } from '@crms/kernel';
 import { getContext, buildContext, runWithBuiltContext } from '@crms/tenant-context';
 import { recordsEngine, query } from '@crms/records-engine';
 import { parseCsv } from './csv.js';
+import { parseXlsx } from './xlsx.js';
 
 export * from './csv.js';
+export * from './xlsx.js';
 
 const logger = createLogger('import-engine');
 
 export interface CreateImportInput {
   moduleId: string;
-  format: 'csv' | 'json';
-  /** Raw CSV text or a JSON array of row objects. */
+  format: 'csv' | 'json' | 'xlsx';
+  /** Raw CSV text, a JSON array of row objects, or base64-encoded .xlsx bytes. */
   content: string;
   /** Map of source column/key -> target field key. Identity if omitted. */
   mapping?: Record<string, string>;
@@ -49,6 +51,7 @@ function rowsOf(format: string, content: string): Record<string, unknown>[] {
     const parsed = JSON.parse(content);
     return Array.isArray(parsed) ? parsed : [parsed];
   }
+  if (format === 'xlsx') return parseXlsx(content);
   return parseCsv(content);
 }
 
