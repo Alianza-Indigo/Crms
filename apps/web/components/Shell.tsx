@@ -20,7 +20,10 @@ const NAV = [
   ['/agents', '🤖 Agentes'],
   ['/search', '🔎 Búsqueda'],
   ['/ai', '✨ IA'],
+  ['/integrations', '🔌 Integraciones'],
   ['/credentials', '🔐 Credenciales'],
+  ['/roles', '🛂 Roles'],
+  ['/settings', '⚙️ Configuración'],
 ];
 
 /** App shell: sidebar nav + application/environment selector (PRD §43.2). */

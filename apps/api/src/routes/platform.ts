@@ -8,7 +8,7 @@ import { createManifest, approveManifest, promote } from '@crms/deployment-engin
 import { listConnectorTemplates, getConnectorTemplate, executeConnector } from '@crms/integration-engine';
 import { PageParamsSchema, newId, newToken, NotFound } from '@crms/kernel';
 import { encryptSecret } from '@crms/credential-engine';
-import { schema, withTenant, eq } from '@crms/database';
+import { schema, withTenant, eq, and, isNull } from '@crms/database';
 import { getContext } from '@crms/tenant-context';
 import { authed } from '../lib/context.js';
 
@@ -166,4 +166,90 @@ export async function platformRoutes(app: FastifyInstance): Promise<void> {
       return { ok: true };
     }),
   );
+
+  // --- Integrations list (PRD §17) ---
+  app.get('/integrations', authed(async () => {
+    const ctx = getContext();
+    return withTenant(async (tx) =>
+      tx
+        .select({ id: schema.integrationConnections.id, key: schema.integrationConnections.key, name: schema.integrationConnections.name, provider: schema.integrationConnections.provider })
+        .from(schema.integrationConnections)
+        .where(and(eq(schema.integrationConnections.applicationId, ctx.applicationId ?? ''), eq(schema.integrationConnections.environment, ctx.environment))),
+    );
+  }));
+
+  // --- Roles & permissions (PRD §18) ---
+  app.get('/roles', authed(async () => {
+    const ctx = getContext();
+    return withTenant(async (tx) =>
+      tx
+        .select()
+        .from(schema.roles)
+        .where(and(eq(schema.roles.tenantId, ctx.tenantId), isNull(schema.roles.deletedAt))),
+    );
+  }));
+
+  app.post('/roles', authed(async (req) => {
+    await assertManage();
+    const ctx = getContext();
+    const body = z.object({ name: z.string().min(1), description: z.string().optional(), permissions: z.array(z.string()).default([]) }).parse(req.body);
+    const id = newId('role');
+    await withTenant(async (tx) => {
+      await tx.insert(schema.roles).values({ id, tenantId: ctx.tenantId, applicationId: ctx.applicationId ?? null, name: body.name, description: body.description ?? null, permissions: body.permissions, createdBy: ctx.userId });
+    });
+    return { id };
+  }));
+
+  app.patch('/roles/:id', authed(async (req) => {
+    await assertManage();
+    const { id } = req.params as { id: string };
+    const body = z.object({ name: z.string().optional(), description: z.string().optional(), permissions: z.array(z.string()).optional() }).parse(req.body);
+    await withTenant(async (tx) => {
+      await tx.update(schema.roles).set({ ...body, updatedAt: new Date() }).where(eq(schema.roles.id, id));
+    });
+    return { ok: true };
+  }));
+
+  app.delete('/roles/:id', authed(async (req) => {
+    await assertManage();
+    const { id } = req.params as { id: string };
+    await withTenant(async (tx) => {
+      await tx.update(schema.roles).set({ deletedAt: new Date() }).where(eq(schema.roles.id, id));
+    });
+    return { ok: true };
+  }));
+
+  // --- Tenant settings + branding (PRD §25) ---
+  app.get('/settings', authed(async () => {
+    const ctx = getContext();
+    return withTenant(async (tx) => {
+      const [t] = await tx.select({ id: schema.tenants.id, name: schema.tenants.name, slug: schema.tenants.slug, branding: schema.tenants.branding }).from(schema.tenants).where(eq(schema.tenants.id, ctx.tenantId));
+      return t ?? { branding: {} };
+    });
+  }));
+
+  app.patch('/settings/branding', authed(async (req) => {
+    await assertManage();
+    const ctx = getContext();
+    const body = z.record(z.unknown()).parse(req.body);
+    await withTenant(async (tx) => {
+      const [t] = await tx.select({ branding: schema.tenants.branding }).from(schema.tenants).where(eq(schema.tenants.id, ctx.tenantId));
+      const merged = { ...((t?.branding as Record<string, unknown>) ?? {}), ...body };
+      await tx.update(schema.tenants).set({ branding: merged }).where(eq(schema.tenants.id, ctx.tenantId));
+    });
+    return { ok: true };
+  }));
+
+  app.get('/service-accounts', authed(async () => {
+    const ctx = getContext();
+    return withTenant(async (tx) =>
+      tx.select({ id: schema.serviceAccounts.id, name: schema.serviceAccounts.name }).from(schema.serviceAccounts).where(eq(schema.serviceAccounts.tenantId, ctx.tenantId)),
+    );
+  }));
+}
+
+/** Require configuration-management permission for tenant-config writes. */
+async function assertManage(): Promise<void> {
+  const { assert } = await import('@crms/permissions');
+  await assert('manage_config', { type: 'application' });
 }

@@ -219,6 +219,27 @@ export class CrmsClient {
       this.request<{ rounds: number; toolCalls: unknown[]; reply?: string; messages?: unknown[] }>('POST', `/agents/${agentId}/run`, { message }),
   };
 
+  integrations = {
+    list: () => this.request<Array<Record<string, unknown>>>('GET', '/integrations'),
+    templates: () => this.request<{ templates: Array<Record<string, unknown>> }>('GET', '/integrations/templates'),
+    create: (input: Record<string, unknown>) => this.request<{ id: string }>('POST', '/integrations', input),
+    execute: (id: string, variables?: Record<string, unknown>) => this.request('POST', `/integrations/${id}/execute`, { variables }),
+  };
+
+  roles = {
+    list: () => this.request<Array<Record<string, unknown>>>('GET', '/roles'),
+    create: (input: { name: string; description?: string; permissions: string[] }) => this.request<{ id: string }>('POST', '/roles', input),
+    update: (id: string, patch: Record<string, unknown>) => this.request('PATCH', `/roles/${id}`, patch),
+    remove: (id: string) => this.request('DELETE', `/roles/${id}`),
+  };
+
+  settings = {
+    get: () => this.request<{ id?: string; name?: string; slug?: string; branding?: Record<string, unknown> }>('GET', '/settings'),
+    setBranding: (branding: Record<string, unknown>) => this.request('PATCH', '/settings/branding', branding),
+    serviceAccounts: () => this.request<Array<{ id: string; name: string }>>('GET', '/service-accounts'),
+    createServiceAccount: (name: string, roleIds: string[] = []) => this.request<{ id: string }>('POST', '/service-accounts', { name, roleIds }),
+  };
+
   // Platform-admin global console (PRD §44).
   admin = {
     overview: () =>
