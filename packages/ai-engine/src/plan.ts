@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { and, eq, schema, withTenant } from '@crms/database';
-import { newId, NotFound, Forbidden, ValidationError, DestructiveUnconfirmed, createLogger } from '@crms/kernel';
+import { newId, NotFound, Forbidden, ValidationError, DestructiveUnconfirmed, isAppError, createLogger } from '@crms/kernel';
 import { getContext } from '@crms/tenant-context';
 import { schemaEngine } from '@crms/schema-engine';
 import { createView, createForm, createPipeline, createDashboard } from '@crms/builder-engine';
@@ -123,20 +123,33 @@ export class AiPlanService {
     });
 
     const results: unknown[] = [];
-    // Resilient execution: a single bad operation must not sink the whole plan.
-    // Each op's outcome (or error) is recorded; the plan succeeds as long as at
-    // least one op applied, so a partially-valid AI plan still builds the app.
+    // Resilient + idempotent execution: a single bad operation must not sink the
+    // whole plan, and re-running a plan whose objects already exist must NOT be
+    // reported as a failure. Each op's outcome (or error) is recorded; a CONFLICT
+    // ("already exists") is treated as an idempotent skip — re-executing the same
+    // plan (e.g. after a retry) simply re-affirms what is already built. The plan
+    // succeeds as long as at least one op applied or was already present.
     let failures = 0;
+    let skipped = 0;
     for (const op of operations) {
       try {
         results.push(await this.applyOperation(op));
       } catch (err) {
+        // "Already exists" is not a failure — the object the op wanted is present.
+        if (isAppError(err) && err.code === 'CONFLICT') {
+          skipped++;
+          logger.info({ planId, op: op.op }, 'AIPlan operation already applied; skipping');
+          results.push({ skipped: op.op, reason: 'already exists' });
+          continue;
+        }
         failures++;
         logger.warn({ planId, op: op.op, err: (err as Error).message }, 'AIPlan operation failed; continuing');
         results.push({ failed: op.op, error: (err as Error).message });
       }
     }
-    const allFailed = failures === operations.length && operations.length > 0;
+    // Total failure only when EVERY op errored for a real reason (none applied,
+    // none were already present).
+    const allFailed = failures > 0 && failures + skipped === operations.length && skipped === 0;
     await withTenant(async (tx) => {
       await tx
         .update(schema.aiExecutions)
@@ -144,7 +157,7 @@ export class AiPlanService {
         .where(eq(schema.aiExecutions.id, executionId));
       await tx.update(schema.aiPlans).set({ status: allFailed ? 'failed' : 'executed' }).where(eq(schema.aiPlans.id, planId));
     });
-    logger.info({ planId, executionId, applied: results.length - failures, failures }, 'AIPlan executed');
+    logger.info({ planId, executionId, applied: results.length - failures - skipped, skipped, failures }, 'AIPlan executed');
     if (allFailed) {
       const first = (results.find((r) => (r as { error?: string }).error) as { error?: string } | undefined)?.error;
       throw ValidationError(`AI plan failed: ${first ?? 'no operation could be applied'}`);

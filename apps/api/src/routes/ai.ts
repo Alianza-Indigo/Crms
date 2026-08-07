@@ -59,7 +59,12 @@ export async function aiRoutes(app: FastifyInstance): Promise<void> {
     '/ai/plans/:id/execute',
     authed(async (req) => {
       const { id } = req.params as { id: string };
-      const result = await aiPlanService.execute(id);
+      let result;
+      try {
+        result = await aiPlanService.execute(id);
+      } catch (err) {
+        exposeAiError(err);
+      }
       await audit({ action: 'ai.plan.execute', resourceType: 'ai_plan', resourceId: id, metadata: { executionId: result.executionId } });
       return result;
     }),
