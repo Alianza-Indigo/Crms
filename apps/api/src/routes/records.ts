@@ -3,6 +3,9 @@ import { z } from 'zod';
 import { recordsEngine } from '@crms/records-engine';
 import { withIdempotency } from '@crms/idempotency';
 import { IDEMPOTENCY_HEADER } from '@crms/config';
+import { asc, eq, schema, withTenant } from '@crms/database';
+import { getContext } from '@crms/tenant-context';
+import { newId } from '@crms/kernel';
 import { authed } from '../lib/context.js';
 
 /**
@@ -150,6 +153,48 @@ export async function recordRoutes(app: FastifyInstance): Promise<void> {
       const confirm = (req.query as { confirm?: string }).confirm === 'true';
       await recordsEngine.delete(moduleId, recordId, { confirm });
       return { ok: true };
+    }),
+  );
+
+  // --- Collaboration: comments + @mentions (PRD §20) ---
+  app.get(
+    '/modules/:moduleId/records/:recordId/comments',
+    authed(async (req) => {
+      const { recordId } = req.params as { moduleId: string; recordId: string };
+      return withTenant(async (tx) =>
+        tx
+          .select()
+          .from(schema.comments)
+          .where(eq(schema.comments.recordId, recordId))
+          .orderBy(asc(schema.comments.createdAt)),
+      );
+    }),
+  );
+
+  app.post(
+    '/modules/:moduleId/records/:recordId/comments',
+    authed(async (req) => {
+      const { moduleId, recordId } = req.params as { moduleId: string; recordId: string };
+      const ctx = getContext();
+      const body = z
+        .object({ body: z.string().min(1), mentions: z.array(z.string()).default([]), parentCommentId: z.string().optional() })
+        .parse(req.body);
+      const id = newId('comment');
+      await withTenant(async (tx) => {
+        await tx.insert(schema.comments).values({
+          id,
+          tenantId: ctx.tenantId,
+          applicationId: ctx.applicationId ?? '',
+          environment: ctx.environment,
+          recordId,
+          moduleId,
+          parentCommentId: body.parentCommentId ?? null,
+          body: body.body,
+          mentions: body.mentions,
+          createdBy: ctx.userId,
+        });
+      });
+      return { id };
     }),
   );
 }

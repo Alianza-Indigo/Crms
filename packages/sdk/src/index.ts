@@ -179,6 +179,10 @@ export class CrmsClient {
       this.request('PATCH', `/modules/${moduleId}/records/${recordId}`, { patch }),
     remove: (moduleId: string, recordId: string) => this.request('DELETE', `/modules/${moduleId}/records/${recordId}?confirm=true`),
     sync: (moduleId: string, since?: string) => this.request<{ changed: unknown[]; deleted: unknown[]; nextSince: string; hasMore: boolean }>('GET', `/modules/${moduleId}/sync${since ? `?since=${encodeURIComponent(since)}` : ''}`),
+    comments: (moduleId: string, recordId: string) =>
+      this.request<Array<{ id: string; body: string; mentions: string[]; createdBy?: string; createdAt?: string }>>('GET', `/modules/${moduleId}/records/${recordId}/comments`),
+    addComment: (moduleId: string, recordId: string, body: string, mentions: string[] = []) =>
+      this.request<{ id: string }>('POST', `/modules/${moduleId}/records/${recordId}/comments`, { body, mentions }),
   };
 
   ai = {

@@ -3,6 +3,7 @@
 import { use, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { getClient } from '../../../../lib/crms';
+import { CommentsDrawer } from '../../../../components/CommentsDrawer';
 
 interface Field {
   id: string;
@@ -27,6 +28,7 @@ export default function DataPage({ params }: { params: Promise<{ moduleId: strin
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [open, setOpen] = useState(false);
+  const [commentsFor, setCommentsFor] = useState<Record_ | null>(null);
 
   const stageField = useMemo(() => fields.find((f) => f.type === 'status' || f.key === 'stage'), [fields]);
 
@@ -131,6 +133,7 @@ export default function DataPage({ params }: { params: Promise<{ moduleId: strin
                 {columns.map((c) => (
                   <th key={c.id}>{c.name}</th>
                 ))}
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -140,11 +143,20 @@ export default function DataPage({ params }: { params: Promise<{ moduleId: strin
                   {columns.map((c) => (
                     <td key={c.id}>{String(r.data[c.key] ?? '')}</td>
                   ))}
+                  <td style={{ textAlign: 'right', paddingRight: '0.9rem' }}>
+                    <button
+                      onClick={() => setCommentsFor(r)}
+                      title="Comentarios"
+                      style={{ background: 'transparent', border: '1px solid var(--border)', borderRadius: 6, padding: '0.15rem 0.5rem', cursor: 'pointer' }}
+                    >
+                      💬
+                    </button>
+                  </td>
                 </tr>
               ))}
               {records.length === 0 && (
                 <tr>
-                  <td className="muted" style={{ padding: '0.9rem' }} colSpan={columns.length + 1}>
+                  <td className="muted" style={{ padding: '0.9rem' }} colSpan={columns.length + 2}>
                     Sin registros todavía.
                   </td>
                 </tr>
@@ -152,6 +164,15 @@ export default function DataPage({ params }: { params: Promise<{ moduleId: strin
             </tbody>
           </table>
         </div>
+      )}
+
+      {commentsFor && (
+        <CommentsDrawer
+          moduleId={moduleId}
+          recordId={commentsFor.id}
+          title={commentsFor.displayTitle ?? 'Registro'}
+          onClose={() => setCommentsFor(null)}
+        />
       )}
 
       {view === 'kanban' && stageField && (
@@ -163,8 +184,11 @@ export default function DataPage({ params }: { params: Promise<{ moduleId: strin
               </h4>
               <div style={{ display: 'grid', gap: '0.5rem' }}>
                 {items.map((r) => (
-                  <div key={r.id} className="card" style={{ padding: '0.65rem 0.8rem' }}>
-                    {r.displayTitle ?? '—'}
+                  <div key={r.id} className="card" style={{ padding: '0.65rem 0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+                    <span>{r.displayTitle ?? '—'}</span>
+                    <button onClick={() => setCommentsFor(r)} title="Comentarios" style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}>
+                      💬
+                    </button>
                   </div>
                 ))}
               </div>
