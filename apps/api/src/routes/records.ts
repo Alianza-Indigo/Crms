@@ -3,9 +3,10 @@ import { z } from 'zod';
 import { recordsEngine } from '@crms/records-engine';
 import { withIdempotency } from '@crms/idempotency';
 import { IDEMPOTENCY_HEADER } from '@crms/config';
-import { asc, eq, schema, withTenant } from '@crms/database';
+import { and, asc, eq, schema, withTenant } from '@crms/database';
 import { getContext } from '@crms/tenant-context';
 import { newId } from '@crms/kernel';
+import { assert } from '@crms/permissions';
 import { authed } from '../lib/context.js';
 
 /**
@@ -160,12 +161,17 @@ export async function recordRoutes(app: FastifyInstance): Promise<void> {
   app.get(
     '/modules/:moduleId/records/:recordId/comments',
     authed(async (req) => {
-      const { recordId } = req.params as { moduleId: string; recordId: string };
+      const { moduleId, recordId } = req.params as { moduleId: string; recordId: string };
+      await recordsEngine.get(moduleId, recordId);
+      const ctx = getContext();
       return withTenant(async (tx) =>
         tx
           .select()
           .from(schema.comments)
-          .where(eq(schema.comments.recordId, recordId))
+          .where(and(eq(schema.comments.recordId, recordId),
+            eq(schema.comments.moduleId, moduleId),
+            eq(schema.comments.applicationId, ctx.applicationId ?? ''),
+            eq(schema.comments.environment, ctx.environment)))
           .orderBy(asc(schema.comments.createdAt)),
       );
     }),
@@ -175,6 +181,9 @@ export async function recordRoutes(app: FastifyInstance): Promise<void> {
     '/modules/:moduleId/records/:recordId/comments',
     authed(async (req) => {
       const { moduleId, recordId } = req.params as { moduleId: string; recordId: string };
+      const current = await recordsEngine.get(moduleId, recordId);
+      await assert('edit', { type: 'record', selector: moduleId,
+        ownerUserId: current.ownerUserId, teamId: current.teamId, branchId: current.branchId });
       const ctx = getContext();
       const body = z
         .object({ body: z.string().min(1), mentions: z.array(z.string()).default([]), parentCommentId: z.string().optional() })
