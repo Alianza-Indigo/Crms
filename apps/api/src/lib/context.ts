@@ -1,8 +1,9 @@
 import type { FastifyReply, FastifyRequest, RouteHandlerMethod } from 'fastify';
-import { Unauthenticated, newCorrelationId } from '@crms/kernel';
+import { Unauthenticated, Forbidden, newCorrelationId } from '@crms/kernel';
 import { authService, isApiKey, resolveApiKeyContext } from '@crms/auth';
 import { runWithBuiltContext, type TenantContext } from '@crms/tenant-context';
-import { APPLICATION_HEADER, ENVIRONMENT_HEADER, CORRELATION_HEADER, type Environment } from '@crms/config';
+import { APPLICATION_HEADER, ENVIRONMENT_HEADER, CORRELATION_HEADER, ENVIRONMENTS, type Environment } from '@crms/config';
+import { eq, schema, withTenant } from '@crms/database';
 
 function bearer(req: FastifyRequest): string | null {
   const h = req.headers.authorization;
@@ -27,8 +28,27 @@ export function authed(handler: (req: FastifyRequest, reply: FastifyReply) => Pr
       ? await resolveApiKeyContext(token, { ip: req.ip, correlationId })
       : await authService.resolveContext(token, { origin: 'api', correlationId });
 
-    const appId = req.headers[APPLICATION_HEADER] as string | undefined;
-    const env = req.headers[ENVIRONMENT_HEADER] as Environment | undefined;
+    const requestedApp = req.headers[APPLICATION_HEADER];
+    const requestedEnv = req.headers[ENVIRONMENT_HEADER];
+    if (requestedApp !== undefined && (typeof requestedApp !== 'string' || !requestedApp)) {
+      throw Forbidden('Invalid application header');
+    }
+    if (requestedEnv !== undefined &&
+      (typeof requestedEnv !== 'string' || !ENVIRONMENTS.includes(requestedEnv as Environment))) {
+      throw Forbidden('Invalid environment header');
+    }
+    const appId = requestedApp as string | undefined;
+    const env = requestedEnv as Environment | undefined;
+    if (appId && appId !== ctx.applicationId) {
+      // Service-account API keys bound to an app cannot switch to a different app.
+      if (ctx.serviceAccountId && ctx.applicationId) throw Forbidden('API key is bound to another application');
+      const appRow = await withTenant(async (tx) => {
+        const [row] = await tx.select({ id: schema.applications.id, status: schema.applications.status })
+          .from(schema.applications).where(eq(schema.applications.id, appId));
+        return row;
+      }, ctx);
+      if (!appRow || appRow.status !== 'active') throw Forbidden('Application is not available in this tenant');
+    }
     if (appId || env) {
       ctx = { ...ctx, applicationId: appId ?? ctx.applicationId, environment: env ?? ctx.environment };
     }
