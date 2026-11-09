@@ -187,9 +187,9 @@ export class AiPlanService {
       await tx.update(schema.aiPlans).set({ status: anyFailed ? 'failed' : 'executed' }).where(eq(schema.aiPlans.id, planId));
     });
     logger.info({ planId, executionId, applied: results.length - failures - skipped, skipped, failures }, 'AIPlan executed');
-    if (allFailed) {
+    if (anyFailed) {
       const first = (results.find((r) => (r as { error?: string }).error) as { error?: string } | undefined)?.error;
-      throw ValidationError(`AI plan failed: ${first ?? 'no operation could be applied'}`);
+      throw ValidationError(`AI plan partially failed (${failures}/${operations.length}): ${first ?? 'review execution results'}`);
     }
     return { executionId, results };
   }
