@@ -69,7 +69,8 @@ jobs:
         run: pnpm db:migrate
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/crms
-      - name: Test tenant isolation and credentials using least-privilege role
-        run: pnpm test:isolation
+      - name: Run full test suite using least-privilege application role
+        run: pnpm test
         env:
           DATABASE_URL: postgres://crms_app:ci_app_password@localhost:5432/crms
+          CRMS_ADMIN_DATABASE_URL: postgres://postgres:postgres@localhost:5432/crms
