@@ -40,11 +40,8 @@ export async function runMigrations(): Promise<void> {
   const db = getDb();
   const migrationsFolder = join(here, '..', 'migrations');
   logger.info({ migrationsFolder }, 'Applying schema migrations');
-  try {
-    await migrate(db, { migrationsFolder });
-  } catch (err) {
-    logger.warn({ err }, 'No generated migrations found or migration skipped; ensure `pnpm db:generate` was run');
-  }
+  // A failed migration must block startup; running on a partial schema is unsafe.
+  await migrate(db, { migrationsFolder });
 
   logger.info('Applying RLS policies');
   const rls = readFileSync(join(here, 'rls.sql'), 'utf8');
