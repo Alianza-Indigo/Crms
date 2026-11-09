@@ -52,7 +52,7 @@ export class AuthService {
     device?: Record<string, unknown>;
     ip?: string;
   }): Promise<SessionResult> {
-    return withElevated(async (tx) => {
+    const outcome = await withElevated(async (tx) => {
       const [user] = await tx.select().from(schema.users).where(eq(schema.users.email, input.email.toLowerCase()));
       if (!user || !user.passwordHash) throw Unauthenticated('Invalid credentials');
       if (user.lockedUntil && user.lockedUntil > new Date()) throw Forbidden('Account is temporarily locked');
@@ -67,7 +67,8 @@ export class AuthService {
             lockedUntil: attempts >= 5 ? new Date(Date.now() + 15 * 60_000) : null,
           })
           .where(eq(schema.users.id, user.id));
-        throw Unauthenticated('Invalid credentials');
+        // Commit the failed-attempt counter BEFORE raising an authentication error.
+        return { failedLogin: true as const };
       }
 
       const token = newToken(32);
@@ -93,6 +94,8 @@ export class AuthService {
       }
       return { token, sessionId, userId: user.id, activeTenantId: membership?.tenantId ?? null, expiresAt };
     });
+    if ('failedLogin' in outcome) throw Unauthenticated('Invalid credentials');
+    return outcome;
   }
 
   /** Resolve a bearer token into a full TenantContext for the active tenant. */
