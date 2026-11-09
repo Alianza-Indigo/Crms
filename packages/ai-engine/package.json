@@ -12,6 +12,7 @@
     "@crms/credential-engine": "workspace:*",
     "@crms/database": "workspace:*",
     "@crms/kernel": "workspace:*",
+    "@crms/permissions": "workspace:*",
     "@crms/schema-engine": "workspace:*",
     "@crms/tenant-context": "workspace:*",
     "@crms/usage-metering": "workspace:*",
