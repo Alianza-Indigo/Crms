@@ -177,7 +177,6 @@ export class AiPlanService {
     }
     // Total failure only when EVERY op errored for a real reason (none applied,
     // none were already present).
-    const allFailed = failures === operations.length;
     const anyFailed = failures > 0;
     await withTenant(async (tx) => {
       await tx
