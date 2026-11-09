@@ -327,7 +327,7 @@ export class AiPlanService {
       case 'delete_field':
         return schemaEngine.deleteField(args.fieldId as string, { confirm: true });
       default:
-        return { skipped: op.op, reason: 'operation not yet supported' };
+        throw ValidationError(`Unsupported AI plan operation: ${op.op}`);
     }
   }
 }
