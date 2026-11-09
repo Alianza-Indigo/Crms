@@ -38,7 +38,7 @@ async function loadGrants(ctx: TenantContext): Promise<Grant[]> {
 function grantMatchesResource(grant: Grant, action: Action, resource: ResourceRef): boolean {
   if (grant.action !== '*' && grant.action !== action) return false;
   if (grant.resourceType !== '*' && grant.resourceType !== resource.type) return false;
-  if (grant.selector !== '*' && resource.selector && grant.selector !== resource.selector) return false;
+  if (grant.selector !== '*' && grant.selector !== resource.selector) return false;
   return true;
 }
 
