@@ -33,7 +33,12 @@ export class RecordsEngine {
       const [r] = await tx
         .select()
         .from(schema.records)
-        .where(and(eq(schema.records.id, recordId), eq(schema.records.moduleId, moduleId)));
+        .where(and(
+          eq(schema.records.id, recordId), eq(schema.records.moduleId, moduleId),
+          eq(schema.records.tenantId, scope.tenantId),
+          eq(schema.records.applicationId, scope.applicationId),
+          eq(schema.records.environment, scope.environment),
+        ));
       return r ?? null;
     });
     if (!row || row.deletedAt) throw NotFound('Record', recordId);
@@ -44,16 +49,20 @@ export class RecordsEngine {
       teamId: row.teamId,
       branchId: row.branchId,
     });
-    void scope;
     const fields = await this.loadFields(moduleId);
     return this.maskRecord(row, fields);
   }
 
   async list(spec: QuerySpec) {
-    await assert('view', { type: 'record', selector: spec.moduleId });
     const page = await query(spec);
     const fields = await this.loadFields(spec.moduleId);
-    page.items = page.items.map((r) => this.maskRecord(r, fields));
+    // Module-level grants are not enough for /own, /team, and /branch scopes.
+    const decisions = await Promise.all(page.items.map((row) => check('view', {
+      type: 'record', selector: spec.moduleId, ownerUserId: row.ownerUserId,
+      teamId: row.teamId, branchId: row.branchId,
+    })));
+    page.items = page.items.filter((_row, i) => decisions[i]!.allowed)
+      .map((row) => this.maskRecord(row, fields));
     return page;
   }
 
@@ -267,7 +276,9 @@ export class RecordsEngine {
   }
 
   async restore(moduleId: string, recordId: string): Promise<void> {
-    await assert('edit', { type: 'record', selector: moduleId });
+    const current = await this.get(moduleId, recordId);
+    await assert('edit', { type: 'record', selector: moduleId, ownerUserId: current.ownerUserId,
+      teamId: current.teamId, branchId: current.branchId });
     await withTenant(async (tx) => {
       await tx.update(schema.records).set({ archivedAt: null }).where(eq(schema.records.id, recordId));
       await writeEvent(tx, buildEvent({ type: EVENT_TYPES.recordRestored, moduleId, recordId }));
