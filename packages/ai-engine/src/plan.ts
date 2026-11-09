@@ -1,7 +1,8 @@
 import { z } from 'zod';
-import { and, eq, schema, withTenant } from '@crms/database';
+import { and, eq, inArray, schema, withTenant } from '@crms/database';
 import { newId, NotFound, Forbidden, ValidationError, DestructiveUnconfirmed, isAppError, createLogger } from '@crms/kernel';
 import { getContext } from '@crms/tenant-context';
+import { assert } from '@crms/permissions';
 import { schemaEngine } from '@crms/schema-engine';
 import { createView, createForm, createPipeline, createDashboard } from '@crms/builder-engine';
 
@@ -34,6 +35,7 @@ export const AiOperationSchema = z.object({
   destructive: z.boolean().default(false),
 });
 export type AiOperation = z.infer<typeof AiOperationSchema>;
+const DESTRUCTIVE_OPERATIONS = new Set<AiOperation['op']>(['delete_module', 'delete_field']);
 
 export const AiPlanInputSchema = z.object({
   summary: z.string(),
@@ -53,9 +55,16 @@ function riskOf(operations: AiOperation[]): 'low' | 'medium' | 'high' | 'critica
 export class AiPlanService {
   async create(input: AiPlanInput): Promise<string> {
     const data = AiPlanInputSchema.parse(input);
+    await assert('manage_config', { type: 'application' });
     const ctx = getContext();
+    if (!ctx.applicationId) throw ValidationError('AI plan requires an application');
+    // Never trust the model/client to mark deletions as destructive.
+    const operations = data.operations.map((op) => ({
+      ...op, destructive: op.destructive || DESTRUCTIVE_OPERATIONS.has(op.op),
+    }));
+    if (operations.length === 0) throw ValidationError('AI plan has no operations');
     const id = newId('aiPlan');
-    const risk = riskOf(data.operations);
+    const risk = riskOf(operations);
     await withTenant(async (tx) => {
       await tx.insert(schema.aiPlans).values({
         id,
@@ -64,11 +73,11 @@ export class AiPlanService {
         environment: ctx.environment,
         conversationId: data.conversationId,
         summary: data.summary,
-        operations: data.operations,
+        operations,
         riskLevel: risk,
         requiredCredentials: data.requiredCredentials,
         requiredApprovals: risk === 'high' ? [{ role: 'admin' }] : [],
-        status: data.operations.some((o) => o.destructive) ? 'pending_approval' : 'draft',
+        status: operations.some((o) => o.destructive) ? 'pending_approval' : 'draft',
         createdByUserId: ctx.userId,
         expiresAt: new Date(Date.now() + data.expiresInHours * 3600 * 1000),
       });
@@ -78,10 +87,16 @@ export class AiPlanService {
   }
 
   async approve(planId: string): Promise<void> {
+    await assert('manage_config', { type: 'application' });
     const ctx = getContext();
+    if (!ctx.applicationId) throw Forbidden('Application context required');
     await withTenant(async (tx) => {
-      const [plan] = await tx.select().from(schema.aiPlans).where(eq(schema.aiPlans.id, planId));
+      const [plan] = await tx.select().from(schema.aiPlans).where(and(
+        eq(schema.aiPlans.id, planId), eq(schema.aiPlans.applicationId, ctx.applicationId!),
+        eq(schema.aiPlans.environment, ctx.environment),
+      ));
       if (!plan) throw NotFound('AIPlan', planId);
+      if (!['draft', 'pending_approval'].includes(plan.status)) throw Forbidden('Plan cannot be approved in this state');
       if (plan.expiresAt && plan.expiresAt < new Date()) throw Forbidden('This plan has expired');
       await tx
         .update(schema.aiPlans)
@@ -96,14 +111,23 @@ export class AiPlanService {
    * recorded for auditability and possible rollback.
    */
   async execute(planId: string): Promise<{ executionId: string; results: unknown[] }> {
+    await assert('manage_config', { type: 'application' });
+    await assert('execute_ai', { type: 'application' });
     const ctx = getContext();
+    if (!ctx.applicationId) throw Forbidden('Application context required');
     const plan = await withTenant(async (tx) => {
-      const [row] = await tx.select().from(schema.aiPlans).where(eq(schema.aiPlans.id, planId));
+      const [row] = await tx.select().from(schema.aiPlans).where(and(
+        eq(schema.aiPlans.id, planId), eq(schema.aiPlans.applicationId, ctx.applicationId!),
+        eq(schema.aiPlans.environment, ctx.environment),
+      ));
       return row ?? null;
     });
     if (!plan) throw NotFound('AIPlan', planId);
+    if (plan.expiresAt && plan.expiresAt < new Date()) throw Forbidden('This plan has expired');
+    if (!['draft', 'approved'].includes(plan.status)) throw Forbidden('Plan cannot be executed in this state');
 
     const operations = plan.operations as AiOperation[];
+    if (operations.length === 0) throw ValidationError('AI plan has no operations');
     const needsApproval = operations.some((o) => o.destructive);
     if (needsApproval && plan.status !== 'approved') {
       throw DestructiveUnconfirmed('ai_plan_execute', { planId, summary: plan.summary });
@@ -111,6 +135,11 @@ export class AiPlanService {
 
     const executionId = newId('aiExecution');
     await withTenant(async (tx) => {
+      // Atomic claim prevents concurrent/double execution of the same plan.
+      const [claimed] = await tx.update(schema.aiPlans).set({ status: 'executing' })
+        .where(and(eq(schema.aiPlans.id, planId), inArray(schema.aiPlans.status, ['draft', 'approved'])))
+        .returning({ id: schema.aiPlans.id });
+      if (!claimed) throw Forbidden('AI plan is already being executed');
       await tx.insert(schema.aiExecutions).values({
         id: executionId,
         tenantId: ctx.tenantId,
@@ -119,7 +148,6 @@ export class AiPlanService {
         startedAt: new Date(),
         correlationId: ctx.correlationId,
       });
-      await tx.update(schema.aiPlans).set({ status: 'executing' }).where(eq(schema.aiPlans.id, planId));
     });
 
     const results: unknown[] = [];
@@ -149,13 +177,14 @@ export class AiPlanService {
     }
     // Total failure only when EVERY op errored for a real reason (none applied,
     // none were already present).
-    const allFailed = failures > 0 && failures + skipped === operations.length && skipped === 0;
+    const allFailed = failures === operations.length;
+    const anyFailed = failures > 0;
     await withTenant(async (tx) => {
       await tx
         .update(schema.aiExecutions)
-        .set({ status: allFailed ? 'failed' : 'succeeded', results, ...(allFailed ? { error: { message: 'All operations failed' } } : {}), finishedAt: new Date() })
+        .set({ status: anyFailed ? 'failed' : 'succeeded', results, ...(anyFailed ? { error: { message: failures + ' operations failed' } } : {}), finishedAt: new Date() })
         .where(eq(schema.aiExecutions.id, executionId));
-      await tx.update(schema.aiPlans).set({ status: allFailed ? 'failed' : 'executed' }).where(eq(schema.aiPlans.id, planId));
+      await tx.update(schema.aiPlans).set({ status: anyFailed ? 'failed' : 'executed' }).where(eq(schema.aiPlans.id, planId));
     });
     logger.info({ planId, executionId, applied: results.length - failures - skipped, skipped, failures }, 'AIPlan executed');
     if (allFailed) {
