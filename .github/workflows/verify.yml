@@ -1,0 +1,75 @@
+name: CRMS verification
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: crms
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d crms"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      NODE_ENV: test
+      REDIS_URL: redis://localhost:6379
+      APP_BASE_URL: http://localhost:3000
+      API_BASE_URL: http://localhost:4000
+      CRMS_APP_ROLE: crms_app
+      CRMS_APP_ROLE_PASSWORD: ci_app_password
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Generate ephemeral test-only secrets
+        run: |
+          echo "PLATFORM_MASTER_KEY=$(node -e \"process.stdout.write(require('node:crypto').randomBytes(32).toString('base64'))\")" >> "$GITHUB_ENV"
+          echo "JWT_SECRET=$(node -e \"process.stdout.write(require('node:crypto').randomBytes(48).toString('base64'))\")" >> "$GITHUB_ENV"
+      - name: Typecheck workspace
+        run: pnpm typecheck
+      - name: Build workspace
+        run: pnpm build
+      - name: Apply migrations and RLS
+        run: pnpm db:migrate
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/crms
+      - name: Test tenant isolation and credentials using least-privilege role
+        run: pnpm test:isolation
+        env:
+          DATABASE_URL: postgres://crms_app:ci_app_password@localhost:5432/crms
