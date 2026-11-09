@@ -42,6 +42,7 @@ jobs:
       API_BASE_URL: http://localhost:4000
       CRMS_APP_ROLE: crms_app
       CRMS_APP_ROLE_PASSWORD: ci_app_password
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/crms
     steps:
       - name: Check out repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -59,8 +60,7 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Generate ephemeral test-only secrets
         run: |
-          echo "PLATFORM_MASTER_KEY=$(node -e \"process.stdout.write(require('node:crypto').randomBytes(32).toString('base64'))\")" >> "$GITHUB_ENV"
-          echo "JWT_SECRET=$(node -e \"process.stdout.write(require('node:crypto').randomBytes(48).toString('base64'))\")" >> "$GITHUB_ENV"
+          node -e "const c=require('node:crypto'); console.log('PLATFORM_MASTER_KEY='+c.randomBytes(32).toString('base64')); console.log('JWT_SECRET='+c.randomBytes(48).toString('base64'))" >> "$GITHUB_ENV"
       - name: Typecheck workspace
         run: pnpm typecheck
       - name: Build workspace
