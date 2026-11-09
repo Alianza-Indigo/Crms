@@ -1,5 +1,5 @@
 import { describe, it, expect, afterAll } from 'vitest';
-import { getDb, closeDb, schema, withElevated } from '@crms/database';
+import { closeDb, schema, withElevated } from '@crms/database';
 import { runWithBuiltContext } from '@crms/tenant-context';
 import { schemaEngine } from '@crms/schema-engine';
 import { recordsEngine } from '@crms/records-engine';
