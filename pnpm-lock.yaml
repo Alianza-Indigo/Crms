@@ -258,6 +258,9 @@ importers:
       '@crms/kernel':
         specifier: workspace:*
         version: link:../kernel
+      '@crms/permissions':
+        specifier: workspace:*
+        version: link:../permissions
       '@crms/schema-engine':
         specifier: workspace:*
         version: link:../schema-engine
