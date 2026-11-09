@@ -28,7 +28,7 @@ Return ONE JSON object with this exact shape:
     { "op": "create_pipeline", "args": { "moduleKey": "snake_case", "key": "snake_case", "name": "Label", "stages": [{"key":"snake_case","name":"Label"}], "transitions": [{"from":"stage_key","to":"stage_key"}] } },
     { "op": "create_dashboard", "args": { "key": "snake_case", "name": "Label", "widgets": [{ "key": "snake_case", "title": "Label", "type": "metric|bar", "moduleKey": "snake_case", "aggregate": "count|sum|avg", "field": "field_key", "groupBy": "field_key_or_stage" }] } },
     { "op": "create_automation", "args": { "key": "snake_case", "name": "Label", "trigger": { "event": "record.created|record.updated|record.stage_changed", "moduleKey": "snake_case" }, "graph": { "start": "a1", "nodes": [{ "id": "a1", "type": "action", "config": { "action": "notify|create_record|update_record|run_ai", "message": "..." } }], "edges": [] } },
-    { "op": "create_role", "args": { "name": "Label", "description": "...", "permissions": ["record:create", "record:read", "record:update"] } },
+    { "op": "create_role", "args": { "name": "Label", "description": "...", "permissions": ["create:record", "view:record", "edit:record"] } },
     { "op": "create_document_template", "args": { "key": "snake_case", "name": "Label", "moduleKey": "snake_case", "html": "<h1>{{title}}</h1><p>{{field_key}}</p>" } },
     { "op": "create_portal", "args": { "key": "snake_case", "name": "Label", "audience": "clients", "moduleKeys": ["snake_case"] } },
     { "op": "create_agent", "args": { "name": "Label", "purpose": "...", "instructions": "...", "provider": "google_ai", "accessibleModuleKeys": ["snake_case"], "allowedActions": ["read_records", "create_record"] } }
