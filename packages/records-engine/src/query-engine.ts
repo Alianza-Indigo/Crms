@@ -1,5 +1,5 @@
-import { and, eq, gt, lt, gte, lte, ilike, inArray, desc, asc, isNull, schema, withTenant } from '@crms/database';
-import { ValidationError, TenantContextMissing, buildPage, type Page } from '@crms/kernel';
+import { and, or, eq, ne, gt, lt, gte, lte, ilike, inArray, desc, asc, isNull, schema, withTenant } from '@crms/database';
+import { ValidationError, TenantContextMissing, buildPage, decodeCursor, type Page } from '@crms/kernel';
 import { getContext } from '@crms/tenant-context';
 
 /**
@@ -94,7 +94,31 @@ export async function query(spec: QuerySpec): Promise<Page<typeof schema.records
       }
     }
 
-    const orderBy = (spec.sorts ?? [{ field: 'created_at', direction: 'desc' }]).map((s) => {
+    const sorts = spec.sorts?.length ? spec.sorts : [{ field: 'created_at', direction: 'desc' as const }];
+    if (spec.cursor) {
+      // Cursors currently encode a record id. Only the default single-column
+      // created_at sort can be resumed safely using that legacy cursor shape.
+      if (sorts.length !== 1 || sorts[0]!.field !== 'created_at') {
+        throw ValidationError('Cursor pagination requires sorting by created_at');
+      }
+      const decoded = decodeCursor(spec.cursor);
+      if (!decoded || typeof decoded.id !== 'string') throw ValidationError('Invalid cursor');
+      const [pivot] = await tx.select({ id: schema.records.id, createdAt: schema.records.createdAt })
+        .from(schema.records).where(and(
+          eq(schema.records.id, decoded.id), eq(schema.records.tenantId, scope.tenantId),
+          eq(schema.records.applicationId, scope.applicationId),
+          eq(schema.records.environment, scope.environment),
+          eq(schema.records.moduleId, spec.moduleId),
+        ));
+      if (!pivot) throw ValidationError('Cursor is no longer valid');
+      const isAsc = sorts[0]!.direction === 'asc';
+      conds.push(or(
+        isAsc ? gt(schema.records.createdAt, pivot.createdAt) : lt(schema.records.createdAt, pivot.createdAt),
+        and(eq(schema.records.createdAt, pivot.createdAt),
+          isAsc ? gt(schema.records.id, pivot.id) : lt(schema.records.id, pivot.id)),
+      )!);
+    }
+    const orderBy = sorts.map((s) => {
       const col = RESERVED_COLUMNS[s.field] ?? 'createdAt';
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const column = (schema.records as any)[col];
@@ -105,7 +129,7 @@ export async function query(spec: QuerySpec): Promise<Page<typeof schema.records
       .select()
       .from(schema.records)
       .where(and(...conds))
-      .orderBy(...orderBy)
+      .orderBy(...orderBy, sorts[0]!.direction === 'asc' ? asc(schema.records.id) : desc(schema.records.id))
       .limit(limit + 1);
 
     return buildPage(rows, limit);
@@ -120,7 +144,7 @@ function reservedCondition(col: keyof typeof schema.records.$inferSelect, filter
     case 'eq':
       return eq(column, filter.value);
     case 'neq':
-      return eq(column, filter.value); // negation handled by caller if needed
+      return ne(column, filter.value);
     case 'gt':
       return gt(column, filter.value);
     case 'gte':
@@ -157,6 +181,9 @@ async function resolveDynamicFilter(
   switch (filter.operator) {
     case 'eq':
       conds.push(eq(schema.recordValues.valueText, String(filter.value)));
+      break;
+    case 'neq':
+      conds.push(ne(schema.recordValues.valueText, String(filter.value)));
       break;
     case 'contains':
       conds.push(ilike(schema.recordValues.valueText, `%${String(filter.value)}%`));
